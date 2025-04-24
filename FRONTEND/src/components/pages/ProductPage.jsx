@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from "react";
-import axios from "axios";
 import { useParams } from "react-router-dom";
 import { FaStar, FaRegStar, FaStarHalfAlt } from "react-icons/fa";
 import { RiDeleteBin6Fill } from "react-icons/ri";
@@ -11,6 +10,7 @@ import { useShop } from "../context/ShopContext";
 import { toast } from "react-toastify";
 import { Badge } from "../ui/badge";
 import { Skeleton } from "../ui/skeleton";
+import { createInteraction } from "../utils/interactions";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -29,6 +29,7 @@ import {
   CardTitle,
 } from "../ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
+import API from "../api/API";
 
 const ProductView = () => {
   const [product, setProduct] = useState(null);
@@ -42,7 +43,7 @@ const ProductView = () => {
     useShop();
 
   const isWishListed = wishListProducts.some(
-    (p) => product?._id && p._id === product._id
+    (p) => product?._id && p === product._id
   );
 
   const ProductPageSkeleton = () => (
@@ -130,18 +131,20 @@ const ProductView = () => {
         setError(null);
         setProduct(null);
         const [response] = await Promise.all([
-          axios.get(`${import.meta.env.VITE_BASE_URL}/products/${id}`, {
+          
+          API.get(`/products/${id}`, {
             signal: controller.signal,
           }),
           new Promise((resolve) => setTimeout(resolve, 1000)),
         ]);
         if (response.status === 200) {
           setProduct(response.data?.product);
+          createInteraction(response.data.product._id,'view');
         } else {
           setError("Failed to fetch product");
         }
       } catch (error) {
-        if (!axios.isCancel(error)) {
+        if (!API.isCancel(error)) {
           console.error("Error fetching product:", error);
           setError("Failed to fetch product");
         }
@@ -150,6 +153,7 @@ const ProductView = () => {
       }
     };
     loadProduct();
+    
     return () => controller.abort();
   }, [id]);
 
@@ -189,13 +193,13 @@ const ProductView = () => {
   const emptyStars = 5 - fullStars - (hasHalfStar ? 1 : 0);
   const SIZES =
     product.category === "Fashion" &&
-    (product.subcategory === "Men's Clothing" ||
-      product.subcategory === "Women's Wear" ||
-      product.subcategory === "Kids' Fashion")
+      (product.subcategory === "Men's Clothing" ||
+        product.subcategory === "Women's Wear" ||
+        product.subcategory === "Kids' Fashion")
       ? ["S", "M", "L", "XL"]
       : product.category === "Footwear"
-      ? ["7", "8", "9", "10", "11", "12"]
-      : [];
+        ? ["7", "8", "9", "10", "11", "12"]
+        : [];
 
   return (
     <div className="p-10 ">
@@ -253,9 +257,8 @@ const ProductView = () => {
           <Heart
             size={30}
             onClick={() => toggleWishlist(product)}
-            className={`text-pink-500 absolute right-5 top-5 ${
-              isWishListed ? "fill-pink-500" : "fill-transparent"
-            } cursor-pointer transition-colors`}
+            className={`text-pink-500 absolute right-5 top-5 ${isWishListed ? "fill-pink-500" : "fill-transparent"
+              } cursor-pointer transition-colors`}
           />
         </div>
 
@@ -488,7 +491,7 @@ const ProductView = () => {
       <div className="p-5 mt-5 border rounded-xl shadow-lg bg-white">
         <h5 className="font-semibold">Reviews</h5>
         <div className="grid grid-cols-3 gap-5 mt-4">
-          {product.reviews.map((review,i) => (
+          {product.reviews.map((review, i) => (
             <Card key={i}>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">

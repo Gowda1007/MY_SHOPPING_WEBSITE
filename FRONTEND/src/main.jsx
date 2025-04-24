@@ -7,6 +7,8 @@ import ShopContext from "./components/context/ShopContext";
 import ScrollToTop from "./hooks/ScrollToTop";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 import { ToastContainer, Bounce } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+
 
 createRoot(document.getElementById("root")).render(
   <BrowserRouter>

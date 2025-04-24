@@ -7,15 +7,19 @@ import { Separator } from "../ui/separator";
 import { toast } from "react-toastify";
 import API from "../api/API";
 import { useNavigate } from "react-router-dom";
+import { createInteraction } from '../utils/interactions'
 
 const Checkout = () => {
   const { checkout, setCheckout, indianRupeeFormatter, parsePrice, finalTotal } = useShop();
   const [isProcessing, setIsProcessing] = useState(false);
   const navigate = useNavigate();
-
   
 
-  const loadRazorpay = () => {
+
+  const loadRazorpay = async () => {
+    for (const item of checkout.items) {
+      await createInteraction(item.product._id, 'checkout_start');
+    }
     return new Promise((resolve) => {
       const script = document.createElement("script");
       script.src = "https://checkout.razorpay.com/v1/checkout.js";
@@ -23,12 +27,13 @@ const Checkout = () => {
       script.onerror = () => resolve(false);
       document.body.appendChild(script);
     });
+   
   };
-  
+
 
   const validateItems = (items) => {
-    return items.every(item => 
-      item.product?._id && 
+    return items.every(item =>
+      item.product?._id &&
       typeof parsePrice(item.product.price) === 'number' &&
       item.quantity > 0
     );
@@ -99,6 +104,12 @@ const Checkout = () => {
               signature: paymentResponse.razorpay_signature
             });
 
+
+            for (const item of checkout.items) {
+              await createInteraction(item.product._id, 'checkout_complete');
+              await createInteraction(item.product._id, 'order');
+            }
+
             setCheckout({
               items: [],
               userDetails: {
@@ -129,6 +140,9 @@ const Checkout = () => {
       new window.Razorpay(options).open();
     } catch (error) {
       console.log(error)
+      for (const item of checkout.items) {
+        await createInteraction(item.product._id, 'payment_failed');
+      }
       toast.error(error.response?.data?.message || "Checkout failed");
     } finally {
       setIsProcessing(false);
@@ -172,14 +186,14 @@ const Checkout = () => {
             <h3 className="text-xl font-semibold mb-4">
               Shipping Details <span className="text-red-600">*</span>
             </h3>
-            
+
             {['username', 'address', 'city', 'state', 'postalCode', 'country', 'phone'].map((field) => (
               <Input
                 key={field}
                 className="mb-3"
                 placeholder={
-                  field === 'username' ? 'Full Name' : 
-                  field.charAt(0).toUpperCase() + field.slice(1).replace(/([A-Z])/g, ' $1')
+                  field === 'username' ? 'Full Name' :
+                    field.charAt(0).toUpperCase() + field.slice(1).replace(/([A-Z])/g, ' $1')
                 }
                 value={checkout.userDetails[field] || ""}
                 onChange={(e) => setCheckout(prev => ({

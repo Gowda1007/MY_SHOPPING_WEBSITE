@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
-import axios from "axios";
 import { Button } from "../ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "../ui/sheet";
 import { Skeleton } from "../ui/skeleton";
@@ -15,6 +14,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "../ui/breadcrumb";
+import API from "../api/API";
 
 const allCategories = {
   Fashion: [
@@ -70,8 +70,8 @@ const Products = () => {
           params.append("subcategory", sub)
         );
 
-        const response = await axios.get(
-          `${import.meta.env.VITE_BASE_URL}/products`,
+        const response = await API.get(
+          `/products`,
           {
             signal: controller.signal,
             params: Object.fromEntries(params),
@@ -82,7 +82,7 @@ const Products = () => {
         setTotalProducts(response.data.totalProducts);
         setTotalPages(response.data.totalPages);
       } catch (error) {
-        if (!axios.isCancel(error)) {
+        if (!API.isCancel(error)) {
           console.error("Error fetching products:", error);
         }
       } finally {

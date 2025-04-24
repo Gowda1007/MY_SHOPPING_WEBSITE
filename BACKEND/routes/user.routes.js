@@ -50,4 +50,6 @@ router.post("/wishlist/bulk", auth.authUser, userController.bulkUpdateWishlist);
 
 router.get("/logout", auth.authUser, userController.logoutUser);
 
+router.post("/interaction", auth.authUser,userController.createInteraction);
+
 module.exports = router;

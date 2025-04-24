@@ -32,26 +32,39 @@ const userSchema = new mongoose.Schema({
     default: "/users/fallback.png",
   },
   cartProducts: [{
-    productId: { 
-      type: String, 
-      ref: 'product', 
-      required: true 
+    productId: {
+      type: String,
+      ref: 'product',
+      required: true
     },
-    quantity: { 
-      type: Number, 
-      default: 1 
+    quantity: {
+      type: Number,
+      default: 1
     },
-    size: { 
+    size: {
       type: String,
     }
   }],
-  wishListProducts: [{
-    productId: { 
-      type: String, 
-      ref: 'Product', 
-      required: true 
-    },
-  }]
+  wishListProducts: [
+    {
+      productId: {
+        type: String,
+        ref: 'product',
+        required: true
+      }
+    }
+  ],
+  __v: {
+    type: Number,
+    select: false
+  }
+});
+
+userSchema.pre('validate', function (next) {
+  this.wishListProducts = this.wishListProducts.filter(item =>
+    item && item.productId && typeof item.productId === 'string'
+  );
+  next();
 });
 
 userSchema.methods.generateAuthToken = async function () {

@@ -7,8 +7,8 @@ const interactionSchema = new mongoose.Schema({
   },
   userId: {
     type: mongoose.Schema.Types.ObjectId,
-    required:true,
-    ref:'user'
+    required: true,
+    ref: 'user'
   },
   productId: {
     type: String,
@@ -20,7 +20,7 @@ const interactionSchema = new mongoose.Schema({
     enum: [
       'order', 'cart', 'wishlist', 'view',
       'search', 'click', 'remove_from_cart',
-      'checkout_start', 'checkout_complete', 'payment_failed','notify_me'
+      'checkout_start', 'checkout_complete','remove_from_cart', 'payment_failed'
     ],
     required: true
   }

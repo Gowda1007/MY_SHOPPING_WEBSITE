@@ -47,10 +47,7 @@ const UserContext = ({ children }) => {
     } finally {
       googleLogout();
       setUser(null);
-      localStorage.removeItem("user");
-      localStorage.removeItem("token");
-      localStorage.removeItem("cartProducts");
-      localStorage.removeItem("wishListProducts");
+      localStorage.clear()
       navigate("/")
       window.location.reload();
     }

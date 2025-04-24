@@ -3,6 +3,8 @@ const userModel = require("../models/user.model");
 const userService = require("../services/user.service");
 const { validationResult } = require("express-validator");
 const blacklistToken = require("../models/blacklistToken.model");
+const interactionModel = require('../models/interaction.model');
+
 module.exports.registerUser = async (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -99,24 +101,24 @@ module.exports.updateCart = async (req, res, next) => {
     const { productId, quantity, size = "" } = req.body;
     const userId = req.user._id;
 
-    
+
     const user = await userModel.findById(userId);
     if (!user.cartProducts) {
-      user.cartProducts = []; 
+      user.cartProducts = [];
     }
 
     if (quantity === 0) {
-      
+
       await userModel.findOneAndUpdate(
         { _id: userId },
         { $pull: { cartProducts: { productId } } }
       );
     } else {
-      
+
       const existingProduct = user.cartProducts.find(p => p.productId === productId);
 
       if (existingProduct) {
-        
+
         await userModel.findOneAndUpdate(
           { _id: userId, "cartProducts.productId": productId },
           {
@@ -127,7 +129,7 @@ module.exports.updateCart = async (req, res, next) => {
           }
         );
       } else {
-        
+
         await userModel.findOneAndUpdate(
           { _id: userId },
           { $push: { cartProducts: { productId, quantity, size } } }
@@ -135,48 +137,60 @@ module.exports.updateCart = async (req, res, next) => {
       }
     }
 
-    
+
     res.status(200).json({ message: "Cart updated successfully" });
   } catch (err) {
     console.error(err);
   }
 };
 
-module.exports.toggleWishlist = async (req, res, next) => {
+// Main toggle function
+module.exports.toggleWishlist = async (req, res) => {
   try {
     const { productId } = req.body;
-    const userId = req.user._id;
+    const user = await userModel.findById(req.user._id);
 
-    const user = await userModel.findById(userId);
-    const index = user.wishListProducts.indexOf(productId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    // Find index using productId
+    const index = user.wishListProducts.findIndex(
+      item => item.productId === productId
+    );
 
     if (index > -1) {
       user.wishListProducts.splice(index, 1);
     } else {
-      user.wishListProducts.push(productId);
+      // Add new item with correct structure
+      user.wishListProducts.push({ productId });
     }
 
     await user.save();
-    res.status(200).json({ message: "Wishlist updated successfully" });
+    res.status(200).json({ message: "Wishlist updated" });
   } catch (err) {
+    console.error('Error:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
   }
 };
 
 // user.controller.js
 module.exports.getCart = async (req, res) => {
   try {
-    const user = await userModel.findById(req.user._id)
-      .populate({
-        path: 'cartProducts.productId',
-        model: 'product', 
-        select: 'title price image oldPrice' 
-      });
+    const user = await userModel.findById(req.user._id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
 
-    if (!user) {
-      return res.status(404).json({ message: 'User  not found' });
-    }
+    // Manual population
+    const cartWithProducts = await Promise.all(
+      user.cartProducts.map(async item => {
+        const product = await Product.findById(item.productId);
+        return {
+          product: product ? product.toObject() : null,
+          quantity: item.quantity,
+          size: item.size
+        };
+      })
+    );
 
-    res.status(200).json({ cartProducts: user.cartProducts });
+    res.status(200).json({ cartProducts: cartWithProducts });
   } catch (error) {
     console.error('Error fetching cart:', error);
     res.status(500).json({ message: 'Error fetching cart', error: error.message });
@@ -185,26 +199,14 @@ module.exports.getCart = async (req, res) => {
 
 module.exports.getWishlist = async (req, res) => {
   try {
-    const user = await userModel.findById(req.user._id)
-      .populate({
-        path: 'wishListProducts', // Correctly populate wishListProducts
-        model: 'product', 
-        select: 'title price image' 
-      });
-
+    const user = await userModel.findById(req.user._id);
     if (!user) {
-      return res.status(404).json({ message: 'User  not found' });
+      return res.status(404).json({ wishListProducts: [] });
     }
-
-    res.status(200).json({ 
-      wishListProducts: user.wishListProducts 
-    });
+    res.status(200).json({ wishListProducts: user.wishListProducts || [] });
   } catch (error) {
     console.error('Error fetching wishlist:', error);
-    res.status(500).json({ 
-      message: 'Error fetching wishlist',
-      error: error.message 
-    });
+    res.status(500).json({ wishListProducts: [] });
   }
 };
 
@@ -228,15 +230,21 @@ module.exports.bulkUpdateCart = async (req, res) => {
 // For wishlist bulk update
 module.exports.bulkUpdateWishlist = async (req, res) => {
   try {
+    const { products } = req.body; // Expects array of objects
+    
+    // Validate structure
+    if (!products.every(p => p.productId)) {
+      return res.status(400).json({ message: 'Invalid wishlist format' });
+    }
+
     await userModel.findByIdAndUpdate(req.user._id, {
-      wishListProducts: req.body.products.map(id => ({
-        productId: id // Direct ID mapping
-      }))
+      wishListProducts: products
     });
+
     res.status(200).json({ message: 'Wishlist updated successfully' });
   } catch (error) {
     console.error('Bulk wishlist update error:', error);
-    res.status(500).json({ message: 'Error updating wishlist', error: error.message });
+    res.status(500).json({ message: 'Error updating wishlist' });
   }
 };
 
@@ -247,4 +255,30 @@ module.exports.logoutUser = async (req, res, next) => {
   await blacklistToken.create({ token });
 
   return res.status(200).json({ message: "Logged out successfully" });
+};
+
+
+module.exports.createInteraction = async (req, res, next) => {
+  const { productId, type } = req.body;
+  const userId = req.user._id;
+
+  if (!productId || !type) {
+    return res.status(400).json({ message: 'Product ID and type are required' });
+  }
+
+  console.log(userId, productId, type);
+
+  try {
+    const interaction = await interactionModel.create({
+      interactionDate: new Date(),
+      userId,
+      productId,
+      type
+    });
+
+    res.status(201).json({ message: 'Interaction created successfully', interaction });
+  } catch (error) {
+    console.error(error); // Log the error for debugging
+    res.status(400).json({ message: 'Failed to create interaction', error: error.message });
+  }
 };

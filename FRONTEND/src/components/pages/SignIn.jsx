@@ -3,10 +3,10 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { createCookie, Link, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import axios from "axios";
 import { FcGoogle } from "react-icons/fc";
 import { useGoogleLogin } from "@react-oauth/google";
 import { useUser } from "../context/UserContext";
+import API from "../api/API";
 
 const SignIn = () => {
   const [email, setEmail] = useState("");
@@ -21,8 +21,8 @@ const SignIn = () => {
     try {
       if (authResult["code"]) {
         const code = authResult["code"];
-        const response = await axios.post(
-          `${import.meta.env.VITE_BASE_URL}/auth/google`,
+        const response = await API.post(
+          `/auth/google`,
           { code },
           { headers: { "Content-Type": "application/json" } }
         );
@@ -81,8 +81,8 @@ const SignIn = () => {
           return;
         }
 
-        const response = await axios.post(
-          `${import.meta.env.VITE_BASE_URL}/user/login`,
+        const response = await API.post(
+          `/user/login`,
           newUser
         );
 

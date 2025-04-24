@@ -92,7 +92,7 @@ const ProductsGrid = ({ products, isLoading }) => {
           ))
         : products.map((product) => {
             const isWishListed = wishListProducts.some(
-              (wishlistProduct) => wishlistProduct._id === product._id
+              (wishlistProduct) => wishlistProduct === product._id
             );
 
             return (
