@@ -30,6 +30,7 @@ import {
 } from "../ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import API from "../api/API";
+import ProductsBar from "../ProductsBar";
 
 const ProductView = () => {
   const [product, setProduct] = useState(null);
@@ -488,6 +489,11 @@ const ProductView = () => {
           </span>
         </div>
       </div>
+
+      <div>
+      <ProductsBar product={product}/>
+      </div>
+
       <div className="p-5 mt-5 border rounded-xl shadow-lg bg-white">
         <h5 className="font-semibold">Reviews</h5>
         <div className="grid grid-cols-3 gap-5 mt-4">

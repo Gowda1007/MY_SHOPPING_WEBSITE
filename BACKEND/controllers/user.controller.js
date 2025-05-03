@@ -1,4 +1,4 @@
-const Product = require('../models/product.model');
+const productModel = require('../models/product.model');
 const userModel = require("../models/user.model");
 const userService = require("../services/user.service");
 const { validationResult } = require("express-validator");
@@ -21,7 +21,6 @@ module.exports.registerUser = async (req, res, next) => {
   }
 
   const profilePhotoUrl = picture ? picture : "";
-  console.log(req.body);
   const hashedPassword = await userModel.hashPassword(password);
   const profileImage = await userService.downloadProfilePhoto(
     profilePhotoUrl,
@@ -175,27 +174,30 @@ module.exports.toggleWishlist = async (req, res) => {
 // user.controller.js
 module.exports.getCart = async (req, res) => {
   try {
-    const user = await userModel.findById(req.user._id);
-    if (!user) return res.status(404).json({ message: 'User not found' });
+    const user = await userModel.findById(req.user._id)
+      .populate({
+        path: 'cartProducts.productId',
+        model: 'product',
+        select: '-reviews -__v' 
+      });
 
-    // Manual population
-    const cartWithProducts = await Promise.all(
-      user.cartProducts.map(async item => {
-        const product = await Product.findById(item.productId);
-        return {
-          product: product ? product.toObject() : null,
-          quantity: item.quantity,
-          size: item.size
-        };
-      })
-    );
+    if (!user) return res.status(404).json({ cartProducts: [] });
 
-    res.status(200).json({ cartProducts: cartWithProducts });
+    const formattedCart = user.cartProducts.map(item => ({
+      product: item.productId, 
+      quantity: item.quantity,
+      size: item.size,
+      _id: item._id
+    }));
+
+    res.status(200).json({ cartProducts: formattedCart });
   } catch (error) {
-    console.error('Error fetching cart:', error);
-    res.status(500).json({ message: 'Error fetching cart', error: error.message });
+    console.error("Backend getCart error:", error);
+    res.status(500).json({ cartProducts: [] });
   }
 };
+
+
 
 module.exports.getWishlist = async (req, res) => {
   try {
@@ -213,27 +215,39 @@ module.exports.getWishlist = async (req, res) => {
 // For cart bulk update
 module.exports.bulkUpdateCart = async (req, res) => {
   try {
-    await userModel.findByIdAndUpdate(req.user._id, {
-      cartProducts: req.body.products.map(item => ({
-        productId: item.product, // Match frontend field name
-        quantity: item.quantity,
-        size: item.size
-      }))
-    });
-    res.status(200).json({ message: 'Cart updated successfully' });
+    const { products } = req.body;
+    
+    // Enhanced validation
+    const isValid = Array.isArray(products) && products.every(item => 
+      item.productId && 
+      typeof item.quantity === 'number' && 
+      item.quantity > 0
+    );
+    
+    if (!isValid) return res.status(400).json({ message: "Invalid cart data" });
+
+    await userModel.findByIdAndUpdate(
+      req.user._id,
+      { cartProducts: products },
+      { new: true, runValidators: true }
+    );
+
+    res.status(200).json({ message: "Cart updated successfully" });
   } catch (error) {
-    console.error('Bulk cart update error:', error);
-    res.status(500).json({ message: 'Error updating cart', error: error.message });
+    console.error("Backend bulkUpdateCart error:", error);
+    res.status(500).json({ message: "Server error" });
   }
 };
+
+
 
 // For wishlist bulk update
 module.exports.bulkUpdateWishlist = async (req, res) => {
   try {
     const { products } = req.body; // Expects array of objects
-    
+
     // Validate structure
-    if (!products.every(p => p.productId)) {
+    if (!Array.isArray(products) || !products.every(p => p.productId)) {
       return res.status(400).json({ message: 'Invalid wishlist format' });
     }
 
@@ -265,8 +279,6 @@ module.exports.createInteraction = async (req, res, next) => {
   if (!productId || !type) {
     return res.status(400).json({ message: 'Product ID and type are required' });
   }
-
-  console.log(userId, productId, type);
 
   try {
     const interaction = await interactionModel.create({

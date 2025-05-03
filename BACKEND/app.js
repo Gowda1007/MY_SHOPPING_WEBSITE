@@ -11,6 +11,7 @@ const userRouter = require("./routes/user.routes");
 const sellerRouter = require("./routes/seller.routes");
 const productsRouter = require("./routes/products.routes");
 const paymentRouter = require("./routes/payment.routes");
+const recommendationRouter = require("./routes/recommendation.routes");
 
 connectToDb();
 const app = express();
@@ -35,5 +36,6 @@ app.use("/seller", sellerRouter);
 app.use("/products", productsRouter);
 app.use("/auth", authRouter);
 app.use("/payment", paymentRouter);
+app.use("/recommendations", recommendationRouter);
 
 module.exports = app;

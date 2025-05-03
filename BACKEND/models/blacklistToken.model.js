@@ -11,7 +11,11 @@ const blacklistTokenSchema = new mongoose.Schema({
         type:Date,
         default:Date.now(),
         expires: 7200
-    }
+    },
+    __v: {
+        type: Number,
+        select: false
+      }
 })
 
 const BlacklistToken = mongoose.model("blacklistToken",blacklistTokenSchema)

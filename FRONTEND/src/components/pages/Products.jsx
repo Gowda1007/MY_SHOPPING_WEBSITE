@@ -82,9 +82,7 @@ const Products = () => {
         setTotalProducts(response.data.totalProducts);
         setTotalPages(response.data.totalPages);
       } catch (error) {
-        if (!API.isCancel(error)) {
           console.error("Error fetching products:", error);
-        }
       } finally {
         setIsLoading(false);
       }

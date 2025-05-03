@@ -22,7 +22,15 @@ const ShopContext = ({ children }) => {
 
   // Initialize state from localStorage
   const [cartProducts, setCartProducts] = useState(() => {
-    return JSON.parse(localStorage.getItem("cartProducts")) || [];
+    const savedCart = JSON.parse(localStorage.getItem("cartProducts")) || [];
+    // Ensure unique products based on product ID and size
+    const uniqueCart = savedCart.filter((item, index, self) =>
+      self.findIndex(t =>
+        t.product._id === item.product._id &&
+        t.size === item.size
+      ) === index
+    );
+    return uniqueCart;
   });
 
   const [wishListProducts, setWishListProducts] = useState(() => {
@@ -60,116 +68,151 @@ const ShopContext = ({ children }) => {
   }, [checkout]);
 
   // Backend sync functions
-  const syncCartWithBackend = async (productId, quantity, size) => {
+  const syncCartWithBackend = async (cart = []) => {
+    if (!Array.isArray(cart)) {
+      console.error('Invalid cart data:', cart);
+      return;
+    }
+
+    const formattedCart = cart
+      .map((item) => ({
+        productId: item.product?._id,
+        quantity: item.quantity,
+        size: item.size || "",
+      }))
+      .filter((item) => item.productId);
+
     try {
-      await API.post("/user/cart", { productId, quantity, size });
+      await API.post("/user/cart/bulk", { products: formattedCart });
     } catch (error) {
       console.error("Cart sync failed:", error);
+      console.error("Failed to save cart changes. Please try again.");
     }
   };
 
+
+  // Sync Wishlist with Backend
   const syncWishlistWithBackend = async (mergedIds) => {
     try {
-      // Convert to backend-compatible format
-      const backendFormat = mergedIds.map(pid => ({ productId: pid }));
-
       await API.post('/user/wishlist/bulk', {
-        products: backendFormat
+        products: mergedIds.map(pid => ({ productId: pid }))
       });
     } catch (error) {
-      console.error('Bulk wishlist sync failed:', error);
+      console.error('Wishlist sync failed:', error);
+      console.error("Failed to save wishlist changes");
     }
   };
 
-  // Cart operations
+  // Load User Data
+  useEffect(() => {
+    const loadUserData = async () => {
+      if (user) {
+        try {
+          const [cartRes, wishlistRes] = await Promise.all([
+            API.get("/user/cart"),
+            API.get("/user/wishlist"),
+          ]);
+
+          // Handle potential missing data
+          const backendCart = cartRes.data?.cartProducts || [];
+          const backendWishlist = wishlistRes.data?.wishListProducts || [];
+
+
+          // Merge carts/wishlists
+          const mergedCart = mergeCarts(backendCart, cartProducts);
+          const mergedWishlist = mergeWishlists(wishListProducts, backendWishlist);
+
+
+          // Update state
+          setCartProducts(mergedCart);
+          setWishListProducts(mergedWishlist);
+
+          // Sync merged data to backend only if there are changes
+          if (JSON.stringify(mergedCart) !== JSON.stringify(cartProducts)) {
+            await syncCartWithBackend(mergedCart); // Sync only if there are changes
+          }
+          await syncWishlistWithBackend(mergedWishlist);
+        } catch (error) {
+          console.error("Data sync failed:", error);
+          console.error("Failed to load user data");
+        } finally {
+          setIsLoading(false);
+        }
+      } else {
+        // Clear sensitive data when logged out
+        setCartProducts([]);
+        setWishListProducts([]);
+        setIsLoading(false);
+      }
+    };
+
+    loadUserData();
+  }, [user]);
+
   const addToCart = async (productToAdd, productQuantity, productSize) => {
     const quantity = parseInt(productQuantity, 10) || 1;
 
-    // Calculate the new cart state
-    const newCart = [...cartProducts];
-    const existingIndex = newCart.findIndex(
-      (item) => item.product._id === productToAdd._id && item.size === productSize
-    );
+    setCartProducts(prevCart => {
+      const newCart = [...prevCart];
+      const existingIndex = newCart.findIndex(
+        (item) => item.product._id === productToAdd._id && item.size === productSize
+      );
 
-    if (existingIndex !== -1) {
-      newCart[existingIndex].quantity += quantity;
-    } else {
-      newCart.push({
-        product: productToAdd,
-        quantity,
-        size: productSize,
-      });
-    }
+      if (existingIndex !== -1) {
+        // If the product with the same ID and size exists, update the quantity
+        newCart[existingIndex].quantity += quantity;
+      } else {
+        // Otherwise, add the new product to the cart
+        newCart.push({
+          product: productToAdd,
+          quantity,
+          size: productSize,
+        });
+      }
 
-    // Update the state with the new cart array
-    setCartProducts(newCart);
+      // Sync with backend after updating state
+      syncCartWithBackend(newCart); // Pass the new cart directly
+      return newCart; // Return the new cart state
+    });
 
     if (user) {
-      const newQuantity = existingIndex !== -1
-        ? newCart[existingIndex].quantity
-        : quantity;
-
-      // Perform async operations after state update
-      await syncCartWithBackend(productToAdd._id, newQuantity, productSize);
       await createInteraction(productToAdd._id, 'cart');
     }
   };
 
   const removeFromCart = async (productToRemove, productSize) => {
-    // Calculate the new cart state
-    const newCart = cartProducts
-      .map((item) => {
-        if (
-          item.product._id === productToRemove._id &&
-          item.size === productSize
-        ) {
-          const newQuantity = item.quantity - 1;
-          return newQuantity > 0
-            ? { ...item, quantity: newQuantity }
-            : null;
-        }
-        return item;
-      })
-      .filter(Boolean);
+    setCartProducts(prevCart => {
+      const newCart = prevCart
+        .map((item) => {
+          if (item.product._id === productToRemove._id && item.size === productSize) {
+            const newQuantity = item.quantity - 1;
+            return newQuantity > 0 ? { ...item, quantity: newQuantity } : null; // Decrease quantity or remove
+          }
+          return item;
+        })
+        .filter(Boolean); // Remove null values
 
-    // Update the state with the new cart array
-    setCartProducts(newCart);
+      // Sync with backend after updating state
+      syncCartWithBackend(newCart); // Pass the updated cart
+      return newCart; // Return the updated cart state
+    });
 
     if (user) {
-      const updatedQuantity = cartProducts.find(
-        (item) =>
-          item.product._id === productToRemove._id && item.size === productSize
-      )?.quantity - 1 || 0;
-
-      if (updatedQuantity > 0) {
-        await syncCartWithBackend(productToRemove._id, updatedQuantity, productSize);
-      } else {
-        await syncCartWithBackend(productToRemove._id, 0, productSize);
-      }
       await createInteraction(productToRemove._id, 'remove_from_cart');
     }
   };
 
-  const deleteFromCart = async (productToRemove, productSize) => {
-    try {
-      const newCart = cartProducts.filter(
-        (item) =>
-          !(
-            item.product._id === productToRemove._id &&
-            item.size === productSize
-          )
-      );
+  const deleteFromCart = async (productToDelete, productSize) => {
+    setCartProducts(prevCart => {
+      const newCart = prevCart.filter(item => !(item.product._id === productToDelete._id && item.size === productSize));
 
-      setCartProducts(newCart);
+      // Sync with backend after deletion
+      syncCartWithBackend(newCart); // Pass the updated cart
+      return newCart; // Return the updated cart state
+    });
 
-      if (user) {
-        await syncCartWithBackend(productToRemove._id, 0, productSize);
-        await createInteraction(productToRemove._id, "remove_from_cart");
-      }
-
-    } catch (error) {
-      console.error('Error removing from cart:', error);
-      toast.error("Failed to remove from cart");
+    if (user) {
+      await createInteraction(productToDelete._id, 'remove');
     }
   };
 
@@ -198,7 +241,7 @@ const ShopContext = ({ children }) => {
   // Wishlist operations
   const toggleWishlist = async (productToAdd) => {
     if (!productToAdd?._id) {
-      toast.error("Invalid product");
+      console.error("Invalid product");
       return;
     }
 
@@ -227,7 +270,7 @@ const ShopContext = ({ children }) => {
     } catch (error) {
       console.error('Error toggling wishlist:', error);
       setWishListProducts(prevWishlist);
-      toast.error("Failed to update wishlist");
+      console.error("Failed to update wishlist");
     }
   };
 
@@ -236,125 +279,84 @@ const ShopContext = ({ children }) => {
     const loadUserData = async () => {
       if (user) {
         try {
+          
           const [cartRes, wishlistRes] = await Promise.all([
             API.get("/user/cart"),
             API.get("/user/wishlist"),
           ]);
 
-          const backendCart = cartRes.data.cartProducts || [];
-          const backendWishlist = wishlistRes.data.wishListProducts || [];
 
-          // Ensure backendWishlist is an array
-          if (!Array.isArray(backendWishlist)) {
-            backendWishlist = [];
-          }
+          const backendCart = cartRes.data?.cartProducts || [];
+          const mergedCart = mergeCarts(backendCart, cartProducts);
 
-          // Merge data
-          const mergedCart = mergeCarts(cartProducts, backendCart);
-          const mergedWishlist = mergeWishlists(wishListProducts, backendWishlist);
-
-          // Update state
           setCartProducts(mergedCart);
-          setWishListProducts(mergedWishlist);
 
-          localStorage.setItem("wishListProducts", JSON.stringify(mergedWishlist));
-          // Sync merged data to backend
-          try {
-            await Promise.all([
-              API.post("/user/cart/bulk", {
-                products: mergedCart.map(item => ({
-                  product: item.product._id,
-                  quantity: item.quantity,
-                  size: item.size
-                }))
-              }),
-              API.post("/user/wishlist/bulk", {
-                products: mergedWishlist.map(pid => ({ productId: pid }))
-              })
-            ]);
-          } catch (syncError) {
-            console.error("Sync error:", syncError);
+          if (JSON.stringify(mergedCart) !== JSON.stringify(cartProducts)) {
+            await syncCartWithBackend(mergedCart);
           }
-
         } catch (error) {
-          console.error("Failed to load user data:", error);
-          throw error;
-        } finally {
-          setIsLoading(false);
+          console.error("[Sync] Error:", error);
         }
-      } else {
-        setIsLoading(false);
       }
     };
 
+
     loadUserData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  const mergeCarts = (localCart, backendCart) => {
+  const mergeCarts = (backendCart = [], localCart = []) => {
     const cartMap = new Map();
 
-    // Step 1: Add backendCart items to the map
+    // Process backend items first
     backendCart.forEach((backendItem) => {
-      const productId = backendItem.productId._id;
-      const size = backendItem.size || '';
+      const productId = backendItem.productId || backendItem.product?._id;
+      const size = backendItem.size || "";
       const key = `${productId}-${size}`;
 
-      cartMap.set(key, {
-        product: backendItem.productId,
-        quantity: backendItem.quantity,
-        size: size
-      });
-    });
-
-    // Step 2: Go through localCart and decide to merge or skip
-    localCart.forEach((localItem) => {
-      const productId = localItem.product._id;
-      const size = localItem.size || '';
-      const key = `${productId}-${size}`;
-
-      if (cartMap.has(key)) {
-        const existingItem = cartMap.get(key);
-
-        // ✅ If quantity differs, add it
-        if (existingItem.quantity !== localItem.quantity) {
-          existingItem.quantity += localItem.quantity;
-          cartMap.set(key, existingItem);
-        }
-        // ✅ If quantity is same, do nothing (item already exists)
-      } else {
-        // ✅ New unique item from localCart, add it
-        cartMap.set(key, { ...localItem });
+      if (!cartMap.has(key)) {
+        cartMap.set(key, {
+          product: backendItem.product || { _id: productId },
+          quantity: backendItem.quantity || 1,
+          size: size || ""
+        });
       }
     });
 
-    // Return final merged cart
+    // Process local items
+    localCart.forEach((localItem) => {
+      const productId = localItem.product?._id;
+      const size = localItem.size || "";
+      const key = `${productId}-${size}`;
+
+      if (!cartMap.has(key)) {
+        cartMap.set(key, {
+          product: localItem.product,
+          quantity: localItem.quantity || 1,
+          size: size || ""
+        });
+      }
+    });
+
     return Array.from(cartMap.values());
   };
 
+
+
   const mergeWishlists = (localWishlist = [], backendWishlist = []) => {
     const seen = new Set();
-    const merged = [];
-  
-    // Process backend wishlist (array of objects)
+
+    // Process backend items (array of {productId} objects)
     backendWishlist.forEach(item => {
-      const pid = item.productId?._id || item.productId;
-      if (pid && !seen.has(pid)) {
-        seen.add(pid);
-        merged.push(pid); // Store as string
-      }
+      const pid = item.productId;
+      if (pid) seen.add(pid.toString());
     });
-  
-    // Process local wishlist (array of mixed types)
-    localWishlist.forEach(item => {
-      const pid = typeof item === 'object' ? item.productId : item;
-      if (pid && !seen.has(pid)) {
-        seen.add(pid);
-        merged.push(pid);
-      }
+
+    // Process local items (array of strings)
+    localWishlist.forEach(pid => {
+      if (pid) seen.add(pid.toString());
     });
-  
-    return merged; // Returns ["uuid1", "uuid2", ...]
+
+    return Array.from(seen);
   };
 
   // Calculation functions
@@ -387,6 +389,7 @@ const ShopContext = ({ children }) => {
 
   const calculateTotal = () => {
     return cartProducts.reduce((total, item) => {
+      if (!item.product || !item.product.price) return total;
       return total + parsePrice(item.product.price) * item.quantity;
     }, 0);
   };

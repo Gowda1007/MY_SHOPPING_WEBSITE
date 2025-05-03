@@ -23,6 +23,10 @@ const interactionSchema = new mongoose.Schema({
       'checkout_start', 'checkout_complete','remove_from_cart', 'payment_failed'
     ],
     required: true
+  },
+  __v: {
+    type: Number,
+    select: false
   }
 });
 

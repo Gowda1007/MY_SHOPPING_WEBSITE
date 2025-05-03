@@ -34,7 +34,6 @@ const userSchema = new mongoose.Schema({
   cartProducts: [{
     productId: {
       type: String,
-      ref: 'product',
       required: true
     },
     quantity: {

@@ -46,9 +46,13 @@ const UserContext = ({ children }) => {
       console.error("Logout failed:", err);
     } finally {
       googleLogout();
-      setUser(null);
-      localStorage.clear()
-      navigate("/")
+      const cart = localStorage.getItem("cartProducts");
+      const wishlist = localStorage.getItem("wishlist");
+      localStorage.clear();
+      if (cart) localStorage.setItem("cartProducts", cart);
+   if (wishlist) localStorage.setItem("wishlist", wishlist);
+      setUser (null);
+      navigate("/");
       window.location.reload();
     }
   }, []);

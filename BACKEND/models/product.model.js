@@ -77,44 +77,46 @@ const productSchema = new mongoose.Schema({
     ref: 'user', 
     required: [true, "Seller ID is required"] 
   },
+  __v: {
+    type: Number,
+    select: false
+  }
 }, { timestamps: true });
 
 
-productSchema.set("toJSON", {
-  transform: function (doc, ret) {
-    
-    if (typeof ret.price === "number") {
-      ret.price = ret.price.toLocaleString("en-IN", {
-        style: "currency",
-        currency: "INR"
-      });
-    } else {
-      ret.price = "Price not available";
-    }
-
-    
-    if (typeof ret.oldPrice === "number") {
-      ret.oldPrice = ret.oldPrice.toLocaleString("en-IN", {
-        style: "currency",
-        currency: "INR"
-      });
-    } else {
-      ret.oldPrice = "Original price not shown";
-    }
-
-    
-    delete ret.__v;
-    delete ret.createdAt;
-    delete ret.updatedAt;
-    
-    return ret;
+function transformDoc(doc, ret) {
+  if (typeof ret.price === "number") {
+    ret.price = ret.price.toLocaleString("en-IN", {
+      style: "currency",
+      currency: "INR"
+    });
+  } else {
+    ret.price = "Price not available";
   }
+
+  if (typeof ret.oldPrice === "number") {
+    ret.oldPrice = ret.oldPrice.toLocaleString("en-IN", {
+      style: "currency",
+      currency: "INR"
+    });
+  } else {
+    ret.oldPrice = "Original price not shown";
+  }
+
+  delete ret.__v;
+  delete ret.createdAt;
+  delete ret.updatedAt;
+  
+  return ret;
+}
+
+productSchema.set("toJSON", {
+  transform: transformDoc
 });
 
 productSchema.set("toObject", {
-  transform: function (doc, ret) {
-    
-    return this.toJSON.transform(doc, ret);
+  transform: function(doc, ret) {
+    return transformDoc(doc, ret);
   }
 });
 
