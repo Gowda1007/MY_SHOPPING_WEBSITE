@@ -9,9 +9,12 @@ const Landing = () => {
   const { user } = useUser()
   return (
     <>
-      <ShopByCategory />
-      <Carousel />
-      {user?.isAuthenticated === true ? <RecommendBar /> : ""}
+      {user?.role !== "seller" ? <div>
+        <ShopByCategory />
+        <Carousel />
+      </div> : ""}
+
+      {user?.role === "user" ? <RecommendBar /> : ""}
     </>
   );
 };

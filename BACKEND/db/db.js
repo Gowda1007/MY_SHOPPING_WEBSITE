@@ -3,6 +3,8 @@ require('../models/product.model');
 require('../models/user.model');
 require('../models/blacklistToken.model');
 require('../models/order.model');
+require("../models/interaction.model");
+require('../models/otp.model');
 
 const connectToDb = async () => {
     try {

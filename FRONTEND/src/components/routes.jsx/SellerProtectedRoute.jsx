@@ -1,11 +1,18 @@
-import { Navigate, Outlet } from "react-router-dom";
-import { useContext } from "react";
-import { UserDataContext } from "../context/UserContext";
+import React from 'react'
+import { Navigate, Outlet, useLocation } from "react-router-dom";
+import { useAuth } from "../hooks/useAuth";
+import { useUser } from '../context/UserContext';
 
 const SellerProtectedRoute = () => {
-  const { user } = useContext(UserDataContext);
+  const { user } = useUser();
+  const { isAuthenticated } = useAuth();
+  const location = useLocation();
 
-  return (user?.email && user?.role=="seller") ? <Outlet /> : <Navigate to="/" replace />;
+
+  if (!isAuthenticated || user?.role !== "seller") {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+  return <Outlet />;
 };
 
 export default SellerProtectedRoute;

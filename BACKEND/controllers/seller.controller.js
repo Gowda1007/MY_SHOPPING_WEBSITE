@@ -1,12 +1,11 @@
 const userModel = require("../models/user.model");
 const sellerService = require("../services/seller.service");
 const { validationResult } = require("express-validator");
+const authController = require("../controllers/auth.controller")
+const blacklistToken = require("../models/blacklistToken.model")
+const orderModel = require("../models/order.model")
 
 module.exports.updateToSeller = async (req, res, next) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
   try {
     const userId = req.user._id;
     const seller = await sellerService.createSeller(userId);
@@ -79,3 +78,29 @@ module.exports.logoutSeller = async (req, res, next) => {
 
   return res.status(200).json({ message: "Logged out successfully" });
 };
+
+
+module.exports.getSellerOrders = async (req, res, next) => {
+  try {
+    const sellerId = req.seller._id
+    console.log("uuuuuuuuuuuuuuuuuuuuserID",sellerId)
+    const seller = await userModel.findById(sellerId).select("-password");
+
+    if (!seller || seller.role !== "seller") {
+      return res.status(403).json({ message: "Unauthorized access" });
+    }
+
+    const orders = await orderModel.find({}).populate("user", "username email");
+
+    return res.status(200).json({
+      message: "All orders retrieved successfully",
+      orders,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Something went wrong",
+      error: error.message,
+    });
+  }
+};
+

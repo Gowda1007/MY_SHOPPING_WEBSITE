@@ -18,4 +18,6 @@ router.get("/profile",auth.authSeller, sellerController.getSellerProfile);
 
 router.get("/logout",auth.authSeller,sellerController.logoutSeller)
 
+router.get("/orders",auth.authSeller,sellerController.getSellerOrders)
+
 module.exports = router;

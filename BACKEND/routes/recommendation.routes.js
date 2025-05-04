@@ -3,7 +3,7 @@ const recommendations = require('../controllers/recommend.controller');
 const router = express.Router();
 const auth = require("../middleware/auth.middleware");
 
-router.get('/content', recommendations.relatedProductsRecommend);
+router.post('/content', recommendations.relatedProductsRecommend);
 
 router.get('/personalized',auth.authUser, recommendations.personalizedProductRecommend);
 

@@ -82,6 +82,7 @@ module.exports.loginUser = async (req, res, next) => {
         email: user.email,
         phone: user.phone,
         image: user.image ? user.image : "",
+        role: user.role
       },
     });
   } catch (error) {
@@ -178,13 +179,13 @@ module.exports.getCart = async (req, res) => {
       .populate({
         path: 'cartProducts.productId',
         model: 'product',
-        select: '-reviews -__v' 
+        select: '-reviews -__v'
       });
 
     if (!user) return res.status(404).json({ cartProducts: [] });
 
     const formattedCart = user.cartProducts.map(item => ({
-      product: item.productId, 
+      product: item.productId,
       quantity: item.quantity,
       size: item.size,
       _id: item._id
@@ -216,14 +217,14 @@ module.exports.getWishlist = async (req, res) => {
 module.exports.bulkUpdateCart = async (req, res) => {
   try {
     const { products } = req.body;
-    
+
     // Enhanced validation
-    const isValid = Array.isArray(products) && products.every(item => 
-      item.productId && 
-      typeof item.quantity === 'number' && 
+    const isValid = Array.isArray(products) && products.every(item =>
+      item.productId &&
+      typeof item.quantity === 'number' &&
       item.quantity > 0
     );
-    
+
     if (!isValid) return res.status(400).json({ message: "Invalid cart data" });
 
     await userModel.findByIdAndUpdate(

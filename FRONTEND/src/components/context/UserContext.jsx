@@ -57,6 +57,24 @@ const UserContext = ({ children }) => {
     }
   }, []);
 
+  const sellerLogout = useCallback(async () => {
+    try {
+      await API.get("/seller/logout");
+    } catch (err) {
+      console.error("Logout failed:", err);
+    } finally {
+      googleLogout();
+      const cart = localStorage.getItem("cartProducts");
+      const wishlist = localStorage.getItem("wishlist");
+      localStorage.clear();
+      if (cart) localStorage.setItem("cartProducts", cart);
+   if (wishlist) localStorage.setItem("wishlist", wishlist);
+      setUser (null);
+      navigate("/");
+      window.location.reload();
+    }
+  }, []);
+
   useEffect(() => {
     const validateToken = async () => {
       try {
@@ -74,7 +92,7 @@ const UserContext = ({ children }) => {
   }, [userLogout]);
 
   return (
-    <UserDataContext.Provider value={{ user, userLogin, userLogout }}>
+    <UserDataContext.Provider value={{ user, userLogin, userLogout,sellerLogout }}>
       {children}
     </UserDataContext.Provider>
   );

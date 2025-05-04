@@ -16,6 +16,8 @@ import WishList from "./components/pages/WishList";
 import ScrollToTop from "./hooks/ScrollToTop";
 import Checkout from "./components/pages/Checkout";
 import Payment from "./components/pages/Payment";
+import SellerRegister from "./components/pages/SellerRegister";
+import Analytics from "./components/pages/Analytics";
 const App = () => {
   return (
     <Routes>
@@ -24,6 +26,7 @@ const App = () => {
         <Route path="/" element={<Landing />} />
         <Route path="/products" element={<Products />} />
         <Route path="/product/:id" element={<Product />} />
+        <Route path="/register-as-seller" element={<SellerRegister />} />
         <Route path="*" element={<Landing />} />
       </Route>
 
@@ -48,7 +51,8 @@ const App = () => {
       {/* Seller Routes */}
       <Route element={<MainLayout />}>
         <Route element={<SellerProtectedRoute />}>
-          <Route path="/seller/*" element={<SellerHome />} />
+          <Route path="/seller-dashboard" element={<SellerHome />} />
+          <Route path="/anlytics" element={<Analytics />} />
         </Route>
       </Route>
     </Routes>

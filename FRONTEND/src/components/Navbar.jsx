@@ -92,7 +92,7 @@ const Navbar = () => {
         <Link to="/" className="flex items-center">
           <img src="logo.png" alt="Logo" className="w-8 h-8 sm:w-12 sm:h-12" />
           <h1 className="mx-2 text-nowrap text-2xl flex-nowrap  font-bold  ">
-            MY SHOP
+            ShopEase
           </h1>
         </Link>
         <Command className="flex mx-10">
@@ -225,7 +225,7 @@ const Navbar = () => {
                     Orders
                   </DropdownMenuLabel>
                 </Link>
-                <Link to="/orders">
+                <Link to="/register-as-seller">
                   <DropdownMenuLabel className=" hover:text-white hover:bg-pink-500 rounded">
                     Become a Seller
                   </DropdownMenuLabel>

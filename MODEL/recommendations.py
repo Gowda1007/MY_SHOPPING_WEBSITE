@@ -80,9 +80,8 @@ def preprocess_data():
     products = convert_mongo_types(products, id_cols=['_id'], date_cols=[])
     
     # Clean unnecessary columns
-    products.drop(columns=['dimensions','reviews','minimumOrderQuantity','image',
-                          'warrantyInformation','weight','availabilityStatus'], 
-                inplace=True, errors='ignore')
+    products.drop(columns=[col for col in ['dimensions','reviews','minimumOrderQuantity','image','warrantyInformation','weight','availabilityStatus'] if col in products.columns], inplace=True)
+
     users.drop(columns=['image','role','password','email','phone','__v'], 
              inplace=True, errors='ignore')
 
@@ -151,75 +150,14 @@ def preprocess_data():
         'type': 'no_interaction'
     }, inplace=True)
     
+    # Prevent future warning
+    final_df = final_df.infer_objects(copy=False)
+    
     # Create text features
     final_df['combined_text'] = create_text_features(final_df)
     
     return final_df
 
-# ==============================================
-# FEATURE ENGINEERING
-# ==============================================
-def safe_feature_scaling(df, features, prefix="scaled"):
-    """Normalize numerical features with error handling"""
-    valid_features = [f for f in features if f in df.columns]
-    df_filled = df[valid_features].copy()
-    
-    for col in valid_features:
-        df_filled[col] = pd.to_numeric(df_filled[col], errors="coerce").fillna(0)
-    
-    scaler = MinMaxScaler()
-    scaled_array = scaler.fit_transform(df_filled)
-    scaled_df = pd.DataFrame(scaled_array, columns=valid_features)
-    
-    # Apply custom weights
-    weight_map = {"price": 0.5, "discountPercentage": 2.0, "rating": 3.0, "stock": 1.0}
-    for col in scaled_df.columns:
-        if col in weight_map:
-            scaled_df[col] *= weight_map[col]
-    
-    return scaled_df.add_prefix(f"{prefix}_")
-
-# ==============================================
-# MODELING
-# ==============================================
-def realtime_similarity_engine(df, text_col="combined_text", num_cols=None):
-    """Build recommendation model with prioritized text features"""
-    # Text feature processing
-    tfidf = TfidfVectorizer(
-        stop_words="english",
-        max_features=10000,
-        ngram_range=(1, 3),
-        min_df=2
-    )
-    tfidf_matrix = tfidf.fit_transform(df[text_col])
-    
-    # Numerical feature processing
-    num_scaled = safe_feature_scaling(df, num_cols)
-    
-    # Combine features with enhanced text weighting
-    text_weights = {
-        'subcategory': 3.0,
-        'category': 2.0,
-        'tags': 1.5,
-        'default': 1.2
-    }
-    
-    # Apply weighted combination
-    combined_features = hstack([
-        tfidf_matrix * text_weights['default'],
-        num_scaled
-    ]).tocsr()
-    
-    # Build model
-    n_neighbors = min(30, len(df) - 1)
-    nn = NearestNeighbors(
-        n_neighbors=n_neighbors + 1,
-        metric="cosine",
-        algorithm="brute"
-    )
-    nn.fit(combined_features)
-    
-    return nn, combined_features
 # ==============================================
 # RECOMMENDATION ENGINES
 # ==============================================
@@ -275,89 +213,106 @@ def get_fallback_recommendations(df, top_n=10):
     except Exception as e:
         print(f"Fallback error: {str(e)}")
         return []
-    
-def get_recommendations_for_product(product_id, model, feature_matrix, unique_products_df):
-    """Fetch recommendations for a specific product"""
+
+def get_content_based_recommendations(product_id, top_n=10):
+    """Generate content-based recommendations for a specific product"""
     try:
-        product_index = unique_products_df[unique_products_df['productId'] == product_id].index[0]
-        distances, indices = model.kneighbors(feature_matrix[product_index], n_neighbors=11)
-        return unique_products_df.iloc[indices.flatten()[1:]]['productId'].tolist()
-    except IndexError:
-        return get_fallback_recommendations(unique_products_df)
+        with mongo_connection() as db:
+            # Get the target product
+            target_product = db.products.find_one({"_id": product_id})
+            if not target_product:
+                return []
+            
+            # Get all products for similarity calculation
+            products = pd.DataFrame(list(db.products.find()))
+            
+            # Create text features using only subcategory, title, category, and tags
+            def create_content_features(df):
+                text_components = []
+                
+                # Process subcategory
+                df['subcategory'] = df['subcategory'].fillna("").astype(str).str.replace(r"[^\w\s]", "", regex=True)
+                
+                text_components.append(df['subcategory'])
+                
+                # Process title
+                df['title'] = df['title'].fillna("").astype(str).str.replace(r"[^\w\s]", "", regex=True)
+                
+                text_components.append(df['title'])
+                
+                # Process category
+                df['category'] = df['category'].fillna("").astype(str).str.replace(r"[^\w\s]", "", regex=True)
+                
+                text_components.append(df['category'])
+                
+                # Process tags
+                df['tags'] = df['tags'].apply(lambda x: ", ".join(map(str, x)) if isinstance(x, list) else "")
+                df['tags'] = df['tags'].fillna("").astype(str).str.replace(r"[^\w\s]", "", regex=True)
+                
+                text_components.append(df['tags'])
+                
+                # Combine the text components in the specified order
+                return text_components[0].str.cat(text_components[1:], sep=" ")
+            
+            products['combined_text'] = create_content_features(products)
+            
+            # TF-IDF vectorization
+            tfidf = TfidfVectorizer(
+                stop_words="english",
+                max_features=10000,
+                ngram_range=(1, 3),
+                min_df=2
+            )
+            tfidf_matrix = tfidf.fit_transform(products['combined_text'])
+            
+            # Compute cosine similarity
+            target_vector = tfidf.transform([products['combined_text'][products['_id'].astype(str) == product_id].iloc[0]])
+            similarity_matrix = cosine_similarity(target_vector, tfidf_matrix).flatten()
+            
+            
+             # Create DataFrame with similarities
+            similarity_df = pd.DataFrame({
+                'productId': products['_id'].astype(str),
+                'similarity': similarity_matrix
+            })
+            
+            # Sort by similarity and get top recommendations
+            recommendations = similarity_df.sort_values(
+                by='similarity', 
+                ascending=False
+            ).head(top_n + 1)  # +1 to exclude the product itself
+            
+            # Exclude the target product
+            recommendations = recommendations[recommendations['productId'] != product_id]
+            
+            return recommendations.head(top_n)['productId'].tolist()
+            
     except Exception as e:
-        print(f"Recommendation error: {str(e)}")
+        print(f"Content-based recommendation error: {str(e)}")
         return []
+
 # ==============================================
 # FLASK ENDPOINTS
 # ==============================================
+
 @app.route('/recommendations/content/<product_id>', methods=['GET'])
 def content_recommendations(product_id):
     """Endpoint for content-based recommendations"""
     try:
-        data = request.json
-        product_id = str(product_id)
-        
-        if not product_id:
-            return jsonify({'error': 'product_id is required'}), 400
-
-        # Fetch and preprocess data
-        df = preprocess_data()
-        
-        # Find the product with the given product_id
-        target_product = df[df['productId'] == product_id]
-        
-        if target_product.empty:
-            return jsonify({'error': 'Product not found'}), 404
-
-        # Get the subcategory and title of the target product
-        target_subcategory = target_product['subcategory'].iloc[0]
-        target_title = target_product['title'].iloc[0]
-        target_tags = target_product['tags'].iloc[0] if 'tags' in target_product.columns else ""
-        target_brand = target_product['brand'].iloc[0]
-
-        # Step 1: Filter products by subcategory
-        related_products = df[df['subcategory'] == target_subcategory]
-
-        # Step 2: Calculate title similarity
-        if not related_products.empty:
-            # Create a TF-IDF vectorizer for title similarity
-            tfidf_vectorizer = TfidfVectorizer(stop_words='english')
-            tfidf_matrix = tfidf_vectorizer.fit_transform(related_products['title'].tolist() + [target_title])
+        # Validate product ID format
+        if not product_id or len(product_id) != 24 or not all(c in string.hexdigits for c in product_id):
+            return jsonify(get_fallback_recommendations(preprocess_data()))
             
-            # Calculate cosine similarity
-            cosine_sim = cosine_similarity(tfidf_matrix[-1], tfidf_matrix[:-1])
-            related_products['title_similarity'] = cosine_sim.flatten()
-
-            # Sort by title similarity
-            related_products = related_products.sort_values(by='title_similarity', ascending=False)
-
-        # Step 3: Further filter by tags and brand
-        if 'tags' in df.columns:
-            related_products['tag_match'] = related_products['tags'].apply(lambda x: len(set(x) & set(target_tags)) > 0)
-            related_products = related_products[related_products['tag_match'] | (related_products['brand'] == target_brand)]
-
-        # Step 4: Prepare the response
-        response = []
-        for _, product in related_products.iterrows():
-            product_info = {
-                'productId': product['productId'],
-                'title': product['title'],
-                'price': product['price'],
-                'discountPercentage': product['discountPercentage'],
-                'rating': product['rating'],
-                'stock': product['stock'],
-                'subcategory': product['subcategory'],
-                'category': product['category'],
-                'brand': product['brand'],
-                'sku': product['sku'],
-                'title_similarity': product.get('title_similarity', 0)  
-            }
-            response.append(product_info)
-
-        return jsonify(response)
-
+        recommendations = get_content_based_recommendations(product_id)
+        
+        if not recommendations:
+            return jsonify(get_fallback_recommendations(preprocess_data()))
+            
+        return jsonify(recommendations)
+        
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"Content recommendation error: {str(e)}")
+        return jsonify(get_fallback_recommendations(preprocess_data()))
     
     
 @app.route('/recommendations/personalized/<user_id>', methods=['GET'])

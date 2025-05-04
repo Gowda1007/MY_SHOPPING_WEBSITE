@@ -6,10 +6,9 @@ import { useShop } from './context/ShopContext';
 import { Card, CardContent } from './ui/card';
 import { Skeleton } from './ui/skeleton';
 
-const ProductBar = ({ product }) => {
+const ProductsBar = ({ product }) => {
     const [relatedProducts, setRelatedProducts] = useState([])
     const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState(null);
     const { wishListProducts } = useShop();
     const [isDelayComplete, setIsDelayComplete] = useState(false);
     const shimmerAnimation = useRef(null);
@@ -18,7 +17,7 @@ const ProductBar = ({ product }) => {
     useEffect(() => {
         const timer = setTimeout(() => {
             setIsDelayComplete(true);
-            setIsLoading(false); 
+            setIsLoading(false);
         }, 2000);
         return () => clearTimeout(timer);
     }, []);
@@ -32,7 +31,7 @@ const ProductBar = ({ product }) => {
                     `.shimmer-container:nth-child(5n + ${i + 1}) .shimmer`,
                     {
                         x: "400%",
-                        duration: 1,
+                        duration: 1.5,
                         ease: "power2.inOut",
                         delay: i * 0.2,
                     },
@@ -58,33 +57,23 @@ const ProductBar = ({ product }) => {
         });
     }, [relatedProducts]);
 
-    useEffect(() => {
-        const fetchRelatedProducts = async () => {
-            try {
-                if (!product?._id) {
-                    setError("Product ID is required");
-                    setIsLoading(false);
-                    return;
-                }
 
-                const response = await API.get(`/recommendations/content/`, { productId: product._id });
-                
-                if (response.data && response.data.products) {
-                    setRelatedProducts(response.data.products);
-                } else {
-                    setError("No products found");
-                }
-            } catch (error) {
-                console.error("Failed to fetch related products:", error);
-                setError("Failed to fetch product recommendations");
-            } finally {
+
+    useEffect(() => {
+        const fetchRelated = async () => {
+            try {
+                const response = await API.post("/recommendations/content/", {
+                    productId: product._id
+                });
+                setRelatedProducts(response.data.products);
                 setIsLoading(false);
+            } catch (error) {
+                console.error("Related Recommendations failed:", error);
             }
         };
 
-        fetchRelatedProducts();
-    }, [product?._id]); // Add product._id as a dependency
-
+        fetchRelated();
+    }, []);
     const handleScroll = (scrollOffset) => {
         if (scrollRef.current) {
             scrollRef.current.scrollBy({
@@ -96,8 +85,7 @@ const ProductBar = ({ product }) => {
 
     return (
         <div className="relative m-7">
-            <h1 className="text-xl font-bold mb-4 mt-5">Related Products</h1>
-            {error && <p className="text-red-500 mb-4">{error}</p>}
+            <h1 className="text-xl font-bold mb-4 mt-5">Recommended for you</h1>
             <div
                 ref={scrollRef}
                 className="flex overflow-x-auto flex-nowrap gap-4 pb-4 scrollbar-hide"
@@ -167,4 +155,4 @@ const ProductBar = ({ product }) => {
     )
 }
 
-export default ProductBar;
+export default ProductsBar;
