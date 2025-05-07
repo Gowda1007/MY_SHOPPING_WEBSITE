@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useState, useContext, useEffect } from "react";
+import { createContext, useState, useContext, useEffect, useMemo } from "react";
 import PropTypes from "prop-types";
 import { useUser } from "./UserContext";
 import API from "../api/API";
@@ -20,17 +20,21 @@ const ShopContext = ({ children }) => {
   const { user } = useUser();
   const [isLoading, setIsLoading] = useState(true);
 
+  // Initialize state from localStorage
   const [cartProducts, setCartProducts] = useState(() => {
     const savedCart = JSON.parse(localStorage.getItem("cartProducts")) || [];
-    return savedCart.filter((item, index, self) =>
+    // Ensure unique products based on product ID and size
+    const uniqueCart = savedCart.filter((item, index, self) =>
       self.findIndex(t =>
-        t.product._id === item.product._id && t.size === item.size
+        t.product._id === item.product._id &&
+        t.size === item.size
       ) === index
     );
+    return uniqueCart;
   });
 
   const [wishListProducts, setWishListProducts] = useState(() => {
-    return JSON.parse(localStorage.getItem("wishlist")) || [];
+    return JSON.parse(localStorage.getItem('wishlist')) || [];
   });
 
   const [checkout, setCheckout] = useState(() => {
@@ -50,6 +54,7 @@ const ShopContext = ({ children }) => {
     );
   });
 
+  // LocalStorage sync
   useEffect(() => {
     localStorage.setItem("cartProducts", JSON.stringify(cartProducts));
   }, [cartProducts]);
@@ -62,8 +67,12 @@ const ShopContext = ({ children }) => {
     localStorage.setItem("checkout", JSON.stringify(checkout));
   }, [checkout]);
 
+  // Backend sync functions
   const syncCartWithBackend = async (cart = []) => {
-    if (!Array.isArray(cart) || user?.role !== "user") return;
+    if (!Array.isArray(cart)) {
+      console.error('Invalid cart data:', cart);
+      return;
+    }
 
     const formattedCart = cart
       .map((item) => ({
@@ -77,48 +86,60 @@ const ShopContext = ({ children }) => {
       await API.post("/user/cart/bulk", { products: formattedCart });
     } catch (error) {
       console.error("Cart sync failed:", error);
+      console.error("Failed to save cart changes. Please try again.");
     }
   };
 
+
+  // Sync Wishlist with Backend
   const syncWishlistWithBackend = async (mergedIds) => {
-    if (user?.role !== "user") return;
     try {
-      await API.post("/user/wishlist/bulk", {
+      await API.post('/user/wishlist/bulk', {
         products: mergedIds.map(pid => ({ productId: pid }))
       });
     } catch (error) {
-      console.error("Wishlist sync failed:", error);
+      console.error('Wishlist sync failed:', error);
+      console.error("Failed to save wishlist changes");
     }
   };
 
+  // Load User Data
   useEffect(() => {
     const loadUserData = async () => {
-      if (user && user.role === "user") {
+      if (user) {
         try {
           const [cartRes, wishlistRes] = await Promise.all([
             API.get("/user/cart"),
             API.get("/user/wishlist"),
           ]);
 
+          // Handle potential missing data
           const backendCart = cartRes.data?.cartProducts || [];
           const backendWishlist = wishlistRes.data?.wishListProducts || [];
 
+
+          // Merge carts/wishlists
           const mergedCart = mergeCarts(backendCart, cartProducts);
           const mergedWishlist = mergeWishlists(wishListProducts, backendWishlist);
 
+
+          // Update state
           setCartProducts(mergedCart);
           setWishListProducts(mergedWishlist);
 
+          // Sync merged data to backend only if there are changes
           if (JSON.stringify(mergedCart) !== JSON.stringify(cartProducts)) {
-            await syncCartWithBackend(mergedCart);
+            await syncCartWithBackend(mergedCart); // Sync only if there are changes
           }
           await syncWishlistWithBackend(mergedWishlist);
         } catch (error) {
-          console.error("Failed to load user data:", error);
+          console.error("Data sync failed:", error);
+          console.error("Failed to load user data");
         } finally {
           setIsLoading(false);
         }
       } else {
+        // Clear sensitive data when logged out
         setCartProducts([]);
         setWishListProducts([]);
         setIsLoading(false);
@@ -128,115 +149,190 @@ const ShopContext = ({ children }) => {
     loadUserData();
   }, [user]);
 
-  const addToCart = async (product, quantity = 1, size = "") => {
-    if (user?.role !== "user") return;
+  const addToCart = async (productToAdd, productQuantity, productSize) => {
+    const quantity = parseInt(productQuantity, 10) || 1;
 
-    setCartProducts(prev => {
-      const updated = [...prev];
-      const index = updated.findIndex(item => item.product._id === product._id && item.size === size);
+    setCartProducts(prevCart => {
+      const newCart = [...prevCart];
+      const existingIndex = newCart.findIndex(
+        (item) => item.product._id === productToAdd._id && item.size === productSize
+      );
 
-      if (index !== -1) {
-        updated[index].quantity += quantity;
+      if (existingIndex !== -1) {
+        // If the product with the same ID and size exists, update the quantity
+        newCart[existingIndex].quantity += quantity;
       } else {
-        updated.push({ product, quantity, size });
+        // Otherwise, add the new product to the cart
+        newCart.push({
+          product: productToAdd,
+          quantity,
+          size: productSize,
+        });
       }
 
-      syncCartWithBackend(updated);
-      return updated;
+      // Sync with backend after updating state
+      syncCartWithBackend(newCart); // Pass the new cart directly
+      return newCart; // Return the new cart state
     });
 
-    await createInteraction(product._id, "cart");
+    if (user) {
+      await createInteraction(productToAdd._id, 'cart');
+    }
   };
 
-  const removeFromCart = async (product, size) => {
-    if (user?.role !== "user") return;
-
-    setCartProducts(prev => {
-      const updated = prev
-        .map(item => {
-          if (item.product._id === product._id && item.size === size) {
-            const newQty = item.quantity - 1;
-            return newQty > 0 ? { ...item, quantity: newQty } : null;
+  const removeFromCart = async (productToRemove, productSize) => {
+    setCartProducts(prevCart => {
+      const newCart = prevCart
+        .map((item) => {
+          if (item.product._id === productToRemove._id && item.size === productSize) {
+            const newQuantity = item.quantity - 1;
+            return newQuantity > 0 ? { ...item, quantity: newQuantity } : null; // Decrease quantity or remove
           }
           return item;
         })
-        .filter(Boolean);
+        .filter(Boolean); // Remove null values
 
-      syncCartWithBackend(updated);
-      return updated;
+      // Sync with backend after updating state
+      syncCartWithBackend(newCart); // Pass the updated cart
+      return newCart; // Return the updated cart state
     });
 
-    await createInteraction(product._id, "remove_from_cart");
+    if (user) {
+      await createInteraction(productToRemove._id, 'remove_from_cart');
+    }
   };
 
-  const deleteFromCart = async (product, size) => {
-    if (user?.role !== "user") return;
+  const deleteFromCart = async (productToDelete, productSize) => {
+    setCartProducts(prevCart => {
+      const newCart = prevCart.filter(item => !(item.product._id === productToDelete._id && item.size === productSize));
 
-    setCartProducts(prev => {
-      const updated = prev.filter(item => !(item.product._id === product._id && item.size === size));
-      syncCartWithBackend(updated);
-      return updated;
+      // Sync with backend after deletion
+      syncCartWithBackend(newCart); // Pass the updated cart
+      return newCart; // Return the updated cart state
     });
 
-    await createInteraction(product._id, "remove");
-  };
-
-  const toggleWishlist = async (product) => {
-    if (!product?._id || user?.role !== "user") return;
-
-    const productId = product._id;
-    const isAlreadyIn = wishListProducts.includes(productId);
-    const updated = isAlreadyIn
-      ? wishListProducts.filter(id => id !== productId)
-      : [...wishListProducts, productId];
-
-    setWishListProducts(updated);
-    await syncWishlistWithBackend(updated);
-    if (!isAlreadyIn) await createInteraction(productId, "wishlist");
-
-    toast.success(isAlreadyIn ? "Removed from wishlist" : "Added to wishlist");
+    if (user) {
+      await createInteraction(productToDelete._id, 'remove');
+    }
   };
 
   const startCheckout = async (items) => {
-    if (user?.role !== "user" || !items.length) return;
-
     try {
-      await createInteraction(items[0].product._id, "checkout_start");
+      if (user && items.length > 0) {
+        await createInteraction(items[0].product._id, "checkout_start");
+      }
+      // ... rest of checkout logic
     } catch (error) {
-      console.error("Checkout start error:", error);
+      console.error('Error starting checkout:', error);
     }
   };
 
   const completeCheckout = async (items) => {
-    if (user?.role !== "user" || !items.length) return;
-
     try {
-      await createInteraction(items[0].product._id, "checkout_complete");
+      if (user && items.length > 0) {
+        await createInteraction(items[0].product._id, "checkout_complete");
+      }
+      // ... rest of checkout completion logic
     } catch (error) {
-      console.error("Checkout complete error:", error);
+      console.error('Error completing checkout:', error);
     }
   };
 
+  // Wishlist operations
+  const toggleWishlist = async (productToAdd) => {
+    if (!productToAdd?._id) {
+      console.error("Invalid product");
+      return;
+    }
+
+    const prevWishlist = [...wishListProducts];
+    const productId = productToAdd._id;
+
+    try {
+      const isAlreadyInWishlist = wishListProducts.includes(productId);
+      const newWishlist = isAlreadyInWishlist
+        ? wishListProducts.filter(id => id !== productId)
+        : [...wishListProducts, productId];
+
+      setWishListProducts(newWishlist);
+
+      if (user?.isAuthenticated) {
+        // Send array of strings to sync function
+        await syncWishlistWithBackend(newWishlist);
+        if (!isAlreadyInWishlist) {
+          await createInteraction(productId, 'wishlist');
+        }
+      }
+
+      toast.success(isAlreadyInWishlist ?
+        "Removed from wishlist" :
+        "Added to wishlist");
+    } catch (error) {
+      console.error('Error toggling wishlist:', error);
+      setWishListProducts(prevWishlist);
+      console.error("Failed to update wishlist");
+    }
+  };
+
+  // Data merging and synchronization
+  useEffect(() => {
+    const loadUserData = async () => {
+      if (user) {
+        try {
+          
+          const [cartRes, wishlistRes] = await Promise.all([
+            API.get("/user/cart"),
+            API.get("/user/wishlist"),
+          ]);
+
+
+          const backendCart = cartRes.data?.cartProducts || [];
+          const mergedCart = mergeCarts(backendCart, cartProducts);
+
+          setCartProducts(mergedCart);
+
+          if (JSON.stringify(mergedCart) !== JSON.stringify(cartProducts)) {
+            await syncCartWithBackend(mergedCart);
+          }
+        } catch (error) {
+          console.error("[Sync] Error:", error);
+        }
+      }
+    };
+
+
+    loadUserData();
+  }, [user]);
+
   const mergeCarts = (backendCart = [], localCart = []) => {
     const cartMap = new Map();
-    backendCart.forEach((item) => {
-      const key = `${item.productId || item.product?._id}-${item.size || ""}`;
+
+    // Process backend items first
+    backendCart.forEach((backendItem) => {
+      const productId = backendItem.productId || backendItem.product?._id;
+      const size = backendItem.size || "";
+      const key = `${productId}-${size}`;
+
       if (!cartMap.has(key)) {
         cartMap.set(key, {
-          product: item.product || { _id: item.productId },
-          quantity: item.quantity || 1,
-          size: item.size || ""
+          product: backendItem.product || { _id: productId },
+          quantity: backendItem.quantity || 1,
+          size: size || ""
         });
       }
     });
 
-    localCart.forEach((item) => {
-      const key = `${item.product?._id}-${item.size || ""}`;
+    // Process local items
+    localCart.forEach((localItem) => {
+      const productId = localItem.product?._id;
+      const size = localItem.size || "";
+      const key = `${productId}-${size}`;
+
       if (!cartMap.has(key)) {
         cartMap.set(key, {
-          product: item.product,
-          quantity: item.quantity || 1,
-          size: item.size || ""
+          product: localItem.product,
+          quantity: localItem.quantity || 1,
+          size: size || ""
         });
       }
     });
@@ -244,25 +340,96 @@ const ShopContext = ({ children }) => {
     return Array.from(cartMap.values());
   };
 
-  const mergeWishlists = (local = [], backend = []) => {
-    const all = [...new Set([...local, ...backend.map(item => item.productId)])];
-    return all;
+
+
+  const mergeWishlists = (localWishlist = [], backendWishlist = []) => {
+    const seen = new Set();
+
+    // Process backend items (array of {productId} objects)
+    backendWishlist.forEach(item => {
+      const pid = item.productId;
+      if (pid) seen.add(pid.toString());
+    });
+
+    // Process local items (array of strings)
+    localWishlist.forEach(pid => {
+      if (pid) seen.add(pid.toString());
+    });
+
+    return Array.from(seen);
   };
+
+  // Calculation functions
+  const cartItems = useMemo(
+    () => cartProducts.reduce((sum, item) => sum + item.quantity, 0),
+    [cartProducts]
+  );
+
+  const indianRupeeFormatter = new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
+  const parsePrice = (price) => {
+    const numericString = String(price)
+      .replace(/[^0-9.]/g, "")
+      .replace(/,/g, "");
+    return parseFloat(numericString) || 0;
+  };
+
+  const calculateTotalSavings = () => {
+    return cartProducts.reduce((acc, item) => {
+      const oldPrice = parsePrice(item.product.oldPrice);
+      const price = parsePrice(item.product.price);
+      return acc + (oldPrice - price) * item.quantity;
+    }, 0);
+  };
+
+  const calculateTotal = () => {
+    return cartProducts.reduce((total, item) => {
+      if (!item.product || !item.product.price) return total;
+      return total + parsePrice(item.product.price) * item.quantity;
+    }, 0);
+  };
+
+  const calculateDeliveryCharges = (totalAmount) => {
+    const freeDeliveryThreshold = 699.0;
+    const deliveryCharge = 70.0;
+    return totalAmount >= freeDeliveryThreshold ? 0 : deliveryCharge;
+  };
+
+  const platFormFee = 20.0;
+  const totalAmount = calculateTotal();
+  const deliveryCharges = calculateDeliveryCharges(totalAmount);
+  const finalTotal = totalAmount + deliveryCharges + platFormFee;
 
   return (
     <ShopDataContext.Provider
       value={{
-        isLoading,
         cartProducts,
         setCartProducts,
-        wishListProducts,
-        setWishListProducts,
-        checkout,
-        setCheckout,
+        cartItems,
         addToCart,
         removeFromCart,
         deleteFromCart,
+        wishListProducts,
+        setWishListProducts,
         toggleWishlist,
+        wishListItems: wishListProducts.length,
+        checkout,
+        setCheckout,
+        indianRupeeFormatter,
+        parsePrice,
+        calculateTotalSavings,
+        calculateTotal,
+        calculateDeliveryCharges,
+        totalAmount,
+        deliveryCharges,
+        finalTotal,
+        platFormFee,
+        isLoading,
         startCheckout,
         completeCheckout,
       }}
