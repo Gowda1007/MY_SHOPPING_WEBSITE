@@ -1,15 +1,13 @@
-import { FaHeart } from "react-icons/fa6";
-import { FaShoppingCart } from "react-icons/fa";
+import { FaHeart, FaLocationDot } from "react-icons/fa6";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/button";
-import { Command, CommandInput } from "./ui/command.jsx";
-import { FaLocationDot } from "react-icons/fa6";
 import { useEffect, useRef, useState } from "react";
 import axios from "axios";
+import { FaShoppingCart } from "react-icons/fa";
 import { useShop } from "./context/ShopContext";
 import { useUser } from "./context/UserContext";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
-
+import { Search } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,16 +16,21 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
+import { Input } from "./ui/input";
+
 const Navbar = () => {
   const [dropdownOpen, setDropdownOpen] = useState(null);
   const [postalCode, setPostalCode] = useState("");
   const [locations, setLocations] = useState([]);
   const [userLocation, setUserLocation] = useState(null);
   const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const dropdownRef = useRef(null);
+  const [searchQuery, setSearchQuery] = useState("");
+
+
   const { cartItems, wishListItems } = useShop();
-  const { user, userLogout } = useUser();
-  useEffect(() => {}, [cartItems, user]);
+  const { user, setUser, userLogout } = useUser();
 
   const fetchLocationData = async () => {
     if (!postalCode.trim()) {
@@ -36,6 +39,8 @@ const Navbar = () => {
     }
 
     setError("");
+    setIsLoading(true);
+
     try {
       const response = await axios.get(
         `${import.meta.env.VITE_ZIP_CODE_URL}/search`,
@@ -55,7 +60,6 @@ const Navbar = () => {
             state: location.state_en || location.state,
           })
         );
-
         setLocations(locationsList);
         if (locationsList.length === 0) setError("No locations found.");
       } else {
@@ -65,11 +69,15 @@ const Navbar = () => {
     } catch (err) {
       setError("Could not fetch location. Try again later.");
       console.error("Error:", err);
+    } finally {
+      setIsLoading(false);
     }
   };
+
   const handleInputChange = (e) => {
     setPostalCode(e.target.value);
   };
+
   const toggleDropdown = (dropdown) => {
     setDropdownOpen((prev) => (prev === dropdown ? null : dropdown));
   };
@@ -85,39 +93,39 @@ const Navbar = () => {
   }, []);
 
   return (
-    <div className="w-full sticky top-0 z-100 bg-white">
-      {" "}
-      <div className="flex justify-between to-background gap-1 sm:ml-0 max-h-20 px-7 pr-3 p-2 shadow-md items-center">
-        {" "}
+    <div className="w-full sticky top-0 z-[100] bg-white">
+      <div className="flex justify-between items-center gap-1 max-h-20 px-7 pr-3 py-2 shadow-md">
         <Link to="/" className="flex items-center">
-          <img src="logo.png" alt="Logo" className="w-8 h-8 sm:w-12 sm:h-12" />
-          <h1 className="mx-2 text-nowrap text-2xl flex-nowrap  font-bold  ">
-            ShopEase
-          </h1>
+
+          <h1 className="mx-2 text-2xl font-bold whitespace-nowrap">ShopEase</h1>
         </Link>
-        <Command className="flex mx-10">
-          <CommandInput
+
+        <div className="flex w-full relative items-center border border-gray-300 rounded-md ">
+          {/* Search Icon */}
+          {/* Search Input */}
+          <input
             type="text"
-            className="h-14 text-mb"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="h-10 text-base px-4 w-full outline-none rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary"
             placeholder="Search for products..."
           />
-        </Command>
-        <div
-          className="relative hidden md:inline max-w-2/3 z-40"
-          ref={dropdownRef}
-        >
+          <button className="text-gray-400 mr-2 absolute top-2 right-0" ><Search className="h-full" /></button>
+        </div>
+
+
+        <div className="relative hidden md:inline z-50" ref={dropdownRef}>
           {userLocation && (
-            <span className="absolute top-0 left-8 whitespace-nowrap text-xs text-gray-500">
-              Deliver to{" "}
+            <span className="absolute top-0 left-8 text-xs text-gray-500">
+              Deliver to
             </span>
           )}
           <button
             onClick={() => toggleDropdown("location")}
-            aria-expanded={dropdownOpen === "location"}
-            className="inline-flex mt-1 gap-1 items-center text-nowrap  px-4 py-2 bg-background rounded-md shadow-sm"
+            className="inline-flex mt-1 gap-1 items-center px-4 py-2 bg-background rounded-md shadow-sm"
           >
             <FaLocationDot className="text-lg" />
-            <p>{userLocation || "Enter Pincode"}</p>
+            <p className="whitespace-nowrap">{userLocation || "Enter Pincode"}</p>
             <svg
               className="ml-2 h-5 w-5"
               xmlns="http://www.w3.org/2000/svg"
@@ -133,7 +141,7 @@ const Navbar = () => {
           </button>
 
           {dropdownOpen === "location" && (
-            <div className="border border-red-70 whitespace-nowrap absolute left-0 overflow-y-auto h-30 max-h-80 top-8 mt-2 w-64 bg-background shadow-md rounded-md p-4">
+            <div className="absolute left-0 top-8 mt-2 w-64 bg-white border rounded-md shadow-md p-4 max-h-80 overflow-y-auto z-50">
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -146,21 +154,24 @@ const Navbar = () => {
                   onClick={fetchLocationData}
                   className="text-black hover:text-primary hover:border-primary border border-black px-2 py-1 rounded-md"
                 >
-                  Apply
+                  {isLoading ? "..." : "Apply"}
                 </button>
               </div>
-              {error && (
-                <div className="text-red-500 text-sm mt-2">{error}</div>
-              )}
+              {error && <div className="text-red-500 text-sm mt-2">{error}</div>}
               {locations.length > 0 && (
                 <ul className="mt-2">
                   {locations.map((location, index) => (
                     <li
                       key={index}
-                      className="py-1 hover:bg-gray-200 cursor-pointer px-2 rounded"
+                      className="py-1 px-2 rounded hover:bg-gray-100 cursor-pointer"
                       onClick={() => {
                         setUserLocation(location.city);
                         toggleDropdown("location");
+                        setUser((prev) => ({
+                          ...prev,
+                          location: postalCode,
+                          city: location.city,
+                        }));
                       }}
                     >
                       {location.city}, {location.state}
@@ -171,7 +182,8 @@ const Navbar = () => {
             </div>
           )}
         </div>
-        <div className="hidden sm:flex items-center gap-2 sm:gap-4">
+
+        <div className="hidden sm:flex items-center gap-4">
           <Link
             to="/wishlist"
             className="flex relative items-center gap-1 p-2 hover:bg-gray-100 rounded-md"
@@ -194,54 +206,55 @@ const Navbar = () => {
             </span>
           </Link>
         </div>
+
         {user?.email ? (
-          <div className="flex items-center justify-center ml-2 mr-2">
+          <div className="flex items-center justify-center ml-2 mr-2 z-[9999]">
             <DropdownMenu>
-              <DropdownMenuTrigger className="rounded-full bg-transparent border border-gray-300 ">
+              <DropdownMenuTrigger className="rounded-full bg-transparent border border-gray-300">
                 <Avatar>
                   <AvatarImage
-                    className="border border-gray-300 rounded-full w-30"
+                    className="rounded-full w-8 h-8"
                     src={`${import.meta.env.VITE_BASE_URL}${user.image}`}
                   />
                   <AvatarFallback className="text-sm bg-primary-foreground border-2 border-black flex items-center justify-center">
-                    {user?.username.split("").slice(0, 2).join("")}
+                    {user?.username.slice(0, 2)}
                   </AvatarFallback>
                 </Avatar>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="mr-1 border-2 bg-white z-10  text-black ">
+              <DropdownMenuContent className="border-2 bg-white z-[9999] text-black mt-2">
                 <Link to="/account">
                   <DropdownMenuLabel className="hover:text-white hover:bg-pink-500 rounded">
                     My Account
                   </DropdownMenuLabel>
                 </Link>
-                <DropdownMenuSeparator className="" />
+                <DropdownMenuSeparator />
                 <Link to="/profile">
-                  <DropdownMenuLabel className=" hover:text-white hover:bg-pink-500 rounded">
+                  <DropdownMenuLabel className="hover:text-white hover:bg-pink-500 rounded">
                     Profile
                   </DropdownMenuLabel>
                 </Link>
                 <Link to="/orders">
-                  <DropdownMenuLabel className=" hover:text-white hover:bg-pink-500 rounded">
+                  <DropdownMenuLabel className="hover:text-white hover:bg-pink-500 rounded">
                     Orders
                   </DropdownMenuLabel>
                 </Link>
                 <Link to="/register-as-seller">
-                  <DropdownMenuLabel className=" hover:text-white hover:bg-pink-500 rounded">
+                  <DropdownMenuLabel className="hover:text-white hover:bg-pink-500 rounded">
                     Become a Seller
                   </DropdownMenuLabel>
                 </Link>
-                <DropdownMenuLabel
-                  className="  hover:text-white hover:bg-pink-500 rounded"
+                <DropdownMenuItem
                   onClick={userLogout}
+                  className="hover:text-white hover:bg-pink-500 rounded"
                 >
                   Logout
-                </DropdownMenuLabel>
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
         ) : (
           <Link to="/login">
-            <Button className="sm:text-xs ml-5 bg-primary active:scale-105 font-bold">
+            <Button className="ml-5 bg-primary font-bold active:scale-105">
               Login
             </Button>
           </Link>

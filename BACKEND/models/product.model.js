@@ -83,6 +83,23 @@ const productSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
+productSchema.index({
+  title: 'text',
+  description: 'text',
+  brand: 'text',
+  category: 'text',
+  tags: 'text'
+}, {
+  weights: {
+    title: 10,
+    description: 5,
+    brand: 8,
+    tags: 5,
+    category: 5
+  },
+  name: 'product_search_index'
+});
+
 
 function transformDoc(doc, ret) {
   if (typeof ret.price === "number") {

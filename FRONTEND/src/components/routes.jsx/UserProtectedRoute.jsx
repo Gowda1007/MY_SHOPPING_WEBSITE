@@ -1,18 +1,15 @@
 import React from 'react'
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { useUser } from '../context/UserContext';
 
 const UserProtectedRoute = () => {
-  const { user } = useUser();
   const { isAuthenticated } = useAuth();
   const location = useLocation();
-
-  if (isAuthenticated || user?.role !== "user") {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+  // Redirect to login if not authenticated
+  if (!isAuthenticated) {
+    return <Navigate to="/login" state={{ from: location.pathname }} replace />;
   }
-
+  // Allow access to authenticated users
   return <Outlet />;
 }
-
-export default UserProtectedRoute
+export default UserProtectedRoute;

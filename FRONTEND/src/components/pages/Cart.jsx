@@ -213,7 +213,7 @@ const Cart = () => {
             </div>
           )}
         </div>
-        <div className="w-[25%] fixed right-3 top-22">
+        <div className="w-[25%] static right-3 top-22">
           {cartProducts.length > 0 && (
             <>
               <div className="w-full rounded-2xl h-fit p-5 border border-gray-400 ">

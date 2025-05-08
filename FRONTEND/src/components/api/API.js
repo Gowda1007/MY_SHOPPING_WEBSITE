@@ -29,12 +29,12 @@ API.interceptors.response.use(
     // Check if the error response indicates unauthorized access
     const message = error?.response?.data?.message || '';
     const status = error?.response?.status;
-    toast.error(message)
-    if (status === 401 || message.toLowerCase().includes("unauthorized")) {
-      toast.info("User Logged Out Please login Again")
-      localStorage.clear(); // Clear localStorage
-      window.location.reload(); // Reload the current page
-    }
+    // toast.error(message)
+    // if (status === 401 || message.toLowerCase().includes("unauthorized")) {
+    //   toast.info("User Logged Out Please login Again")
+    //   localStorage.clear(); // Clear localStorage
+    //   window.location.reload(); // Reload the current page
+    // }
 
     return Promise.reject(error); // Propagate the error
   }
