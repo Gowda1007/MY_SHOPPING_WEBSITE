@@ -13,7 +13,6 @@ import Orders from "./components/pages/Orders";
 import SellerProtectedRoute from "./components/routes.jsx/SellerProtectedRoute";
 import SellerHome from "./components/pages/SellerHome";
 import WishList from "./components/pages/WishList";
-import ScrollToTop from "./hooks/ScrollToTop";
 import Checkout from "./components/pages/Checkout";
 import Payment from "./components/pages/Payment";
 import SellerRegister from "./components/pages/SellerRegister";
@@ -45,6 +44,8 @@ const App = () => {
           <Route path="/wishlist" element={<WishList />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/orders" element={<Orders />} />
+          <Route path="/*" element={<Landing />} />
+
         </Route>
       </Route>
 
@@ -53,6 +54,7 @@ const App = () => {
         <Route element={<SellerProtectedRoute />}>
           <Route path="/seller-dashboard" element={<SellerHome />} />
           <Route path="/anlytics" element={<Analytics />} />
+          <Route path="/*" element={<SellerHome />} />
         </Route>
       </Route>
     </Routes>

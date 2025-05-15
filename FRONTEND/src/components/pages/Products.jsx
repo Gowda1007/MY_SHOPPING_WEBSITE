@@ -1,3 +1,4 @@
+// In your Products page component
 import { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Button } from "../ui/button";
@@ -14,6 +15,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "../ui/breadcrumb";
+import axios from "axios";
 import API from "../api/API";
 
 const allCategories = {
@@ -53,6 +55,7 @@ const Products = () => {
     () => searchParams.getAll("subcategory") || [],
     [searchParams]
   );
+  const searchQuery = searchParams.get("query") || "";
 
   useEffect(() => {
     const controller = new AbortController();
@@ -70,7 +73,9 @@ const Products = () => {
           params.append("subcategory", sub)
         );
 
-        const response = await API.get(
+        if (searchQuery) params.append("search", searchQuery);
+
+        const response = await API(
           `/products`,
           {
             signal: controller.signal,
@@ -82,7 +87,7 @@ const Products = () => {
         setTotalProducts(response.data.totalProducts);
         setTotalPages(response.data.totalPages);
       } catch (error) {
-          console.error("Error fetching products:", error);
+        console.error("Error fetching products:", error);
       } finally {
         setIsLoading(false);
       }
@@ -90,7 +95,7 @@ const Products = () => {
 
     fetchProducts();
     return () => controller.abort();
-  }, [currentPage, selectedCategory, selectedSubcategories]);
+  }, [currentPage, selectedCategory, selectedSubcategories, searchQuery]);
 
   const handleCategoryChange = (category) => {
     const newParams = new URLSearchParams();
@@ -126,56 +131,48 @@ const Products = () => {
   return (
     <div className="overflow-x-hidden w-full mx-auto px-4 py-4 sm:px-6 lg:px-8 lg:py-8">
       <Breadcrumb>
-        {" "}
         <BreadcrumbList>
-          {" "}
           <BreadcrumbItem>
-            {" "}
-            <BreadcrumbLink href="/">Home</BreadcrumbLink>{" "}
-          </BreadcrumbItem>{" "}
-          <BreadcrumbSeparator />{" "}
+            <BreadcrumbLink href="/">Home</BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
           <BreadcrumbItem>
-            {" "}
-            <BreadcrumbLink href="/products">Products</BreadcrumbLink>{" "}
-          </BreadcrumbItem>{" "}
-          {selectedCategory && (
+            <BreadcrumbLink href="/products">Products</BreadcrumbLink>
+          </BreadcrumbItem>
+          {searchQuery ? (
             <>
-              {" "}
-              <BreadcrumbSeparator />{" "}
+              <BreadcrumbSeparator />
               <BreadcrumbItem>
-                {" "}
-                <BreadcrumbLink
-                  href={`/products?category=${encodeURIComponent(
-                    selectedCategory
-                  )}`}
-                >
-                  {" "}
-                  {selectedCategory}{" "}
-                </BreadcrumbLink>{" "}
-              </BreadcrumbItem>{" "}
+                <BreadcrumbPage>
+                  Search: {searchQuery}
+                </BreadcrumbPage>
+              </BreadcrumbItem>
             </>
-          )}{" "}
+          ) : selectedCategory ? (
+            <>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbLink
+                  href={`/products?category=${encodeURIComponent(selectedCategory)}`}
+                >
+                  {selectedCategory}
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+            </>
+          ) : null}
           {selectedSubcategories.length > 0 && (
             <>
-              {" "}
-              <BreadcrumbSeparator />{" "}
+              <BreadcrumbSeparator />
               <BreadcrumbItem>
-                {" "}
                 <BreadcrumbPage>
-                  {" "}
-                  {selectedSubcategories.join(", ")}{" "}
-                </BreadcrumbPage>{" "}
-              </BreadcrumbItem>{" "}
+                  {selectedSubcategories.join(", ")}
+                </BreadcrumbPage>
+              </BreadcrumbItem>
             </>
-          )}{" "}
-        </BreadcrumbList>{" "}
+          )}
+        </BreadcrumbList>
       </Breadcrumb>
-      <div
-        className={`flex flex-col mt-5 sm:flex-row ${
-          isDesktopSidebarOpen ? "gap-8" : "gap-0"
-        }`}
-      >
-        {/* Mobile Filters */}
+      <div className={`flex flex-col mt-5 sm:flex-row ${isDesktopSidebarOpen ? "gap-8" : "gap-0"}`}>
         <Sheet>
           <SheetTrigger asChild className="sm:hidden">
             <div className="gap-2 flex shadow-md px-2 py-2 items-center justify-center rounded-lg">
@@ -195,12 +192,7 @@ const Products = () => {
           </SheetContent>
         </Sheet>
 
-        {/* Desktop Filters */}
-        <div
-          className={`hidden sm:block overflow-hidden transition-all duration-300 ${
-            isDesktopSidebarOpen ? "w-72" : "w-0"
-          }`}
-        >
+        <div className={`hidden sm:block overflow-hidden transition-all duration-300 ${isDesktopSidebarOpen ? "w-72" : "w-0"}`}>
           <div className="w-72">
             <div className="rounded-lg border p-4">
               <FilterSideBar
@@ -215,13 +207,10 @@ const Products = () => {
           </div>
         </div>
 
-        {/* Main Content */}
         <div className="flex-1">
           <div className="mb-6 flex items-center justify-between">
             <h1 className="lg:text-2xl text-mb mt-0 font-semibold lg:font-bold">
-              {isLoading
-                ? "Loading products..."
-                : `Showing ${products.length} of ${totalProducts} products`}
+              {isLoading ? "Loading products..." : `Showing ${products.length} of ${totalProducts} products`}
             </h1>
             <button
               className="gap-2 hidden sm:flex shadow-md px-2 py-2 items-center justify-center rounded-lg"
@@ -233,7 +222,6 @@ const Products = () => {
 
           <ProductsGrid products={products} isLoading={isLoading} />
 
-          {/* Pagination */}
           {totalPages > 1 && (
             <div className="mt-8 flex justify-center gap-2">
               <Button
@@ -259,9 +247,7 @@ const Products = () => {
               <Button
                 variant="outline"
                 disabled={currentPage === totalPages || isLoading}
-                onClick={() =>
-                  setCurrentPage((p) => Math.min(totalPages, p + 1))
-                }
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               >
                 Next
               </Button>

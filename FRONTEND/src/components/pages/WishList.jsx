@@ -1,55 +1,102 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import { useShop } from "../context/ShopContext";
-import { useUser } from '../context/UserContext';
+import { useUser } from "../context/UserContext";
 import { Button } from "../ui/button";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "../ui/card";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  CardFooter,
+} from "../ui/card";
 import { toast } from "react-toastify";
 import { HeartOff, ShoppingCart } from "lucide-react";
 import gsap from "gsap";
 import { Link, useNavigate } from "react-router-dom";
+import API from "../api/API";
 
 const Wishlist = () => {
   const { user } = useUser();
-  const { addToCart, indianRupeeFormatter, parsePrice, toggleWishlist ,wishListProducts } = useShop();
+  const {
+    addToCart,
+    toggleWishlist,
+    wishListProducts,
+    indianRupeeFormatter,
+    parsePrice,
+  } = useShop();
   const navigate = useNavigate();
   const productRef = useRef(null);
+  const [wishlistData, setWishlistData] = useState([]);
 
   useEffect(() => {
-    gsap.set(".wishlist-item", { opacity: 0, y: 20 });
-    gsap.to(".wishlist-item", {
-      opacity: 1,
-      y: 0,
-      stagger: 0.1,
-      duration: 0.3,
-      ease: "power2.out"
-    });
-  }, [user?.wishlist]);
+    if (wishlistData?.length > 0) {
+      gsap.set(".wishlist-item", { opacity: 0, y: 20 });
+      gsap.to(".wishlist-item", {
+        opacity: 1,
+        y: 0,
+        stagger: 0.1,
+        duration: 0.3,
+        ease: "power2.out",
+      });
+    }
+  }, [wishlistData]);
+
+  useEffect(() => {
+    const fetchWishlistProducts = async () => {
+      try {
+        const responses = await Promise.all(
+          wishListProducts.map((id, i) =>
+            API.get(`/products/wishlist/${id}`).then((res) => res.data)
+          )
+        );
+        setWishlistData(responses.map((res) => res.product));
+      } catch (error) {
+        console.error("Error fetching wishlist products:", error);
+        toast.error("Failed to load wishlist products");
+      }
+    };
+
+    if (wishListProducts.length > 0) {
+      fetchWishlistProducts();
+    } else {
+      setWishlistData([]);
+    }
+  }, [wishListProducts]);
 
   const handleAddToCart = (product) => {
     addToCart(product, 1);
-    toast.success(`Added to Cart ${product.title} has been added to your cart`);
   };
 
-  const handleToggleWishlist = (productId) => {
-    toggleWishlist(productId);
-    toast.success("Wishlist Updated Item removed from your wishlist");
+  const handleToggleWishlist = (product) => {
+    toggleWishlist(product);
   };
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold">Your Wishlist</h1>
-        <Button variant="outline" onClick={() => navigate('/')}>
+        <Button
+          className="hover:text-white"
+          variant="outline"
+          onClick={() => navigate("/products")}
+        >
           Continue Shopping
         </Button>
       </div>
 
-      {wishListProducts?.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {wishListProducts.map((product) => (
-            <Card key={product} className="wishlist-item group relative hover:shadow-lg transition-shadow">
+      {wishlistData?.length > 0 ? (
+        <div
+          ref={productRef}
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+        >
+          {wishlistData.map((product) => (
+            <Card
+              key={product._id}
+              className="wishlist-item  group relative hover:shadow-lg transition-shadow"
+            >
               <Button
-                variant="ghost"
+                variant="primary"
                 size="icon"
                 className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity"
                 onClick={() => handleToggleWishlist(product)}
@@ -57,31 +104,26 @@ const Wishlist = () => {
                 <HeartOff className="h-5 w-5 text-destructive" />
               </Button>
 
-              <Link to={`/product/${product}`}>
+              <Link to={`/product/${product._id}`}>
                 <CardHeader className="pb-2">
                   <img
-                    src={`${import.meta.env.VITE_BASE_URL}/images/${product}.webp`}
-                    alt={product}
                     className="w-full h-48 object-contain rounded-t-lg"
+                    src={`${import.meta.env.VITE_BASE_URL}/${product.image}`}
+                    alt={product.title}
+                    loading="lazy"
+                    style={{
+                      backgroundColor: "transparent",
+                      aspectRatio: "1/1",
+                    }}
                   />
                 </CardHeader>
-                <CardContent className="space-y-2">
-                  <CardTitle className="text-lg">{product.title}</CardTitle>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xl font-semibold">
-                      {indianRupeeFormatter.format(parsePrice(product.price))}
-                    </span>
-                    {product.discountPercentage > 0 && (
-                      <span className="text-sm line-through text-muted-foreground">
-                        {indianRupeeFormatter.format(parsePrice(product.oldPrice))}
-                      </span>
-                    )}
-                  </div>
-                  {product.discountPercentage > 0 && (
-                    <span className="text-sm bg-green-100 text-green-800 px-2 py-1 rounded-full">
-                      {product.discountPercentage}% OFF
-                    </span>
-                  )}
+                <CardContent>
+                  <CardTitle className="text-sm font-semibold">
+                    {product.title}
+                  </CardTitle>
+                  <CardDescription className="text-green-400 font-bold">
+                    {indianRupeeFormatter.format(parsePrice(product.price))}
+                  </CardDescription>
                 </CardContent>
               </Link>
 
@@ -106,7 +148,7 @@ const Wishlist = () => {
             <p className="text-muted-foreground">
               Start adding items you love by clicking the heart icon on products
             </p>
-            <Button onClick={() => navigate('/')} className="mt-4">
+            <Button onClick={() => navigate("/")} className="mt-4">
               Explore Products
             </Button>
           </div>

@@ -1,15 +1,14 @@
 const express = require('express');
 const router = express.Router();
-const productsController = require('../controllers/products.controller')
+const productsController = require('../controllers/products.controller');
 
-// Proper route setup with controller functions
+// Combine search & filter in fetchFilteredProducts
 router.get('/', productsController.fetchFilteredProducts);
-
 
 router.post('/category', productsController.fetchProductsOnCategory);
 
-router.get('/search', productsController.searchProducts);
-
 router.get('/:id', productsController.getProduct);
 
-module.exports = router; 
+router.get('/wishlist/:id', productsController.getWishListProducts);
+
+module.exports = router;

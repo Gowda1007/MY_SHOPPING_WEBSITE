@@ -1,13 +1,15 @@
-import { FaHeart, FaLocationDot } from "react-icons/fa6";
-import { Link, useNavigate } from "react-router-dom";
-import { Button } from "../components/ui/button";
-import { useEffect, useRef, useState } from "react";
+import { useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
+import { Button } from "./ui/button";
+import { useEffect } from "react";
 import axios from "axios";
 import { FaShoppingCart } from "react-icons/fa";
 import { useShop } from "./context/ShopContext";
 import { useUser } from "./context/UserContext";
+import { IoLocation } from "react-icons/io5";
+import { FaHeart } from "react-icons/fa";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
-import { Search } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,7 +18,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
-import { Input } from "./ui/input";
 
 const Navbar = () => {
   const [dropdownOpen, setDropdownOpen] = useState(null);
@@ -27,7 +28,7 @@ const Navbar = () => {
   const [isLoading, setIsLoading] = useState(false);
   const dropdownRef = useRef(null);
   const [searchQuery, setSearchQuery] = useState("");
-
+  const navigate = useNavigate();
 
   const { cartItems, wishListItems } = useShop();
   const { user, setUser, userLogout } = useUser();
@@ -92,27 +93,40 @@ const Navbar = () => {
     return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, []);
 
+  const handleWordSearch = () => {
+    if (searchQuery.trim()) {
+      navigate(`/products?query=${encodeURIComponent(searchQuery.trim())}`);
+    }
+  };
+
+  // Fires when a word is completed (on space or Enter)
+  const handleKeyDown = async (e) => {
+    if (e.key === " " || e.key === "Enter") {
+      const trimmedQuery = searchQuery.trim();
+      if (trimmedQuery) {
+        await handleWordSearch(trimmedQuery);
+      }
+    }
+  };
+
   return (
     <div className="w-full sticky top-0 z-[100] bg-white">
       <div className="flex justify-between items-center gap-1 max-h-20 px-7 pr-3 py-2 shadow-md">
         <Link to="/" className="flex items-center">
-
-          <h1 className="mx-2 text-2xl font-bold whitespace-nowrap">ShopEase</h1>
+          <h1 className="mx-2 text-2xl font-bold whitespace-nowrap">
+            ShopEase
+          </h1>
         </Link>
 
-        <div className="flex w-full relative items-center border border-gray-300 rounded-md ">
-          {/* Search Icon */}
-          {/* Search Input */}
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="h-10 text-base px-4 w-full outline-none rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary"
-            placeholder="Search for products..."
-          />
-          <button className="text-gray-400 mr-2 absolute top-2 right-0" ><Search className="h-full" /></button>
-        </div>
-
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          onKeyDown={handleKeyDown}
+          className="h-10 text-base px-4 w-full outline-none rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary"
+          placeholder="Search for products..."
+          required
+        />
 
         <div className="relative hidden md:inline z-50" ref={dropdownRef}>
           {userLocation && (
@@ -124,8 +138,10 @@ const Navbar = () => {
             onClick={() => toggleDropdown("location")}
             className="inline-flex mt-1 gap-1 items-center px-4 py-2 bg-background rounded-md shadow-sm"
           >
-            <FaLocationDot className="text-lg" />
-            <p className="whitespace-nowrap">{userLocation || "Enter Pincode"}</p>
+            <IoLocation className="text-lg" />
+            <p className="whitespace-nowrap">
+              {userLocation || "Enter Pincode"}
+            </p>
             <svg
               className="ml-2 h-5 w-5"
               xmlns="http://www.w3.org/2000/svg"
@@ -157,7 +173,9 @@ const Navbar = () => {
                   {isLoading ? "..." : "Apply"}
                 </button>
               </div>
-              {error && <div className="text-red-500 text-sm mt-2">{error}</div>}
+              {error && (
+                <div className="text-red-500 text-sm mt-2">{error}</div>
+              )}
               {locations.length > 0 && (
                 <ul className="mt-2">
                   {locations.map((location, index) => (
